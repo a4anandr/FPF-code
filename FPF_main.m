@@ -20,7 +20,7 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 1;           % Computes gain using Coifman kernel method
-rkhs  = 1;           % Computes gain using RKHS
+rkhs  = 0;           % Computes gain using RKHS
 
 %% FPF parameters
 
@@ -60,7 +60,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.4 0.4]; 
+sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));

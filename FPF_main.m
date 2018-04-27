@@ -19,8 +19,8 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 1;           % Computes gain using Coifman kernel method
-rkhs  = 0;           % Computes gain using RKHS
+coif  = 0;           % Computes gain using Coifman kernel method
+rkhs  = 1;           % Computes gain using RKHS
 
 %% FPF parameters
 
@@ -60,7 +60,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.1 0.1]; 
+sigma = [0.4 0.4]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -190,11 +190,32 @@ for k = 2: 1: (T/dt)
        figure(100);
        plot(range, p_t,'DisplayName',['t = ' num2str( (k-1)*dt )]);
        hold on;
+       v = version;
+       if (v ~= '8.3.0.532 (R2014a)')
+            if fin == 1
+             % CAUTION : histogram command works only in recent Matlab
+             % versions, if it does not work, comment this section out
+               histogram(Xi_fin(end,:),N,'Normalization','pdf','DisplayStyle','stairs','BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)]);
+            end
+            if coif == 1
+               histogram(Xi_coif(end,:),N,'Normalization','pdf','DisplayStyle','stairs','BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)]);
+            end
+            if rkhs == 1
+               histogram(Xi_rkhs(end,:),N,'Normalization','pdf','DisplayStyle','stairs','BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)]);
+            end
+       else
+            if fin == 1
+               hist(Xi_fin(end,:),N);
+            end
+            if coif == 1
+               hist(Xi_coif(end,:),N);
+            end
+            if rkhs == 1
+               hist(Xi_rkhs(end,:),N);
+            end           
+       end  
        legend('show');
     end
-        
-        
-       
 end
 
 if exact ==1
@@ -209,7 +230,6 @@ end
 if rkhs == 1
     mu_rkhs(k)      = mean(Xi_rkhs(k,:));
 end
-
 
 %% Plots
 figure;

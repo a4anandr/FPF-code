@@ -35,39 +35,30 @@ while (norm(diff_mu) > epsilon| norm(diff_w) > epsilon)
        end
        pj(:,j)=p ./ sum(p);        % Probability of Xi(j) having come from i^th Gaussian
 
-       if (sum(isnan(pj(:,j))))
-           
-            if(isnan(pj(1,j)))
-                pj(1,j)=0;
-            end
-            
-            if(isnan(pj(2,j)))
-                pj(2,j)=0;
-            end
-            
-            if(isnan(pj(3,j)))
-                pj(3,j)=0;
-            end
-            
-            if(sum(pj(:,j))==0)
-                trash=trash+1;
-                i=i+1;
-            end            
-            j;           
-        else
-            continue;
-        end
+       if (sum(isnan(pj(:,j))))    % If the probability of a particle having come from any of the components is 0, then discard the particle
+           for i = 1:length(mu)
+                if(isnan(pj(i,j)))
+                    pj(i,j)=0;
+                end
+           end
+           if(sum(pj(:,j))==0)
+               trash=trash+1;
+%               i=i+1;
+           end                     
+       else
+           continue;
+       end
     end
     
      % M - step 
      
      %% Mixing probabilities
      for i = 1: length(mu)
-        w_em_t(i) = (1/(N-trash)) * sum(pj(i,:));
+        w_em_t(i) = (1/(N-trash)) * sum(pj(i,:));     % Weight corresponding to a Gaussian is computed as the ratio of sum of the probabilities of all particles having come from this Gaussian to the total number of particles
      end
      
-     w_em_new = w_em_t./sum(w_em_t);
-     w_em_new(1)=max(w_em_new(1),w0_thresh);
+     w_em_new = w_em_t./sum(w_em_t);                  % Normalizing the weights to 1, if they do not sum to 1 already.
+     w_em_new(1)=max(w_em_new(1),w0_thresh);          % Setting a lower threshold for the weight of the equivalent Gaussian density to ensure the gains do not blow up.
      for i = 2: length(mu)
         w_em_new(i)= w_em_t(i)/(sum(w_em_t(2:end))) * (1-w_em_new(1));
         if(isnan(w_em_new(i)))

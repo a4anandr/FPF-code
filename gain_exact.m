@@ -1,6 +1,6 @@
 function [ K ] = gain_exact( Xi, c, mu, sigma, w, diag )
 % Computes the exact gain by solving the one dimensional Poisson's equation
-tic;
+% tic;
 
 syms x
 N = length(Xi);
@@ -23,7 +23,7 @@ for i = 1 : N
     end
     K(i) = integral(i) / p_x(Xi(i));
 end
-toc
+% toc
 
 if diag == 1
     figure;

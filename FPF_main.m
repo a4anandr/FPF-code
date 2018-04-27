@@ -9,6 +9,7 @@
 clear;
 clc;
 close all;
+tic
 
 syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
@@ -60,7 +61,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.4 0.4]; 
+sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -184,37 +185,38 @@ for k = 2: 1: (T/dt)
        step = 0.05;
        range = min(mu_em)- 3 * max(sigma_em): step : max(mu_em) + 3 * max(sigma_em);
        for i = 1: length(mu_em)
-           p_t = p_t + w_em(i) * exp(-( range - mu_em(i)).^2 / (2 * sigma_em(i)^2)) * (1 / sqrt(2 * pi * sigma_em(i)^2)) * step;
+           p_t = p_t + w_em(i) * exp(-( range - mu_em(i)).^2 / (2 * sigma_em(i)^2)) * (1 / sqrt(2 * pi * sigma_em(i)^2));
        end
        
        figure(100);
-       plot(range, p_t,'DisplayName',['t = ' num2str( (k-1)*dt )]);
+       plot(range, p_t,'DisplayName',['Using exact at t = ' num2str( (k-1)*dt )]);
        hold on;
-       v = version;
-       if (v ~= '8.3.0.532 (R2014a)')
+       v = version('-release');
+       if (v == '2014a')
+            if fin == 1
+               hist(Xi_fin(k-1,:),N);
+            end
+            if coif == 1
+               hist(Xi_coif(k-1,:),N);
+            end
+            if rkhs == 1
+               hist(Xi_rkhs(k-1,:),N);
+            end                      
+       else
             if fin == 1
              % CAUTION : histogram command works only in recent Matlab
              % versions, if it does not work, comment this section out
-               histogram(Xi_fin(end,:),N,'Normalization','pdf','DisplayStyle','stairs','BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)]);
+               histogram(Xi_fin(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Using finite at t =' num2str( (k-1)*dt )]);
             end
             if coif == 1
-               histogram(Xi_coif(end,:),N,'Normalization','pdf','DisplayStyle','stairs','BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)]);
+               histogram(Xi_coif(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Using Coifman at t =' num2str( (k-1)*dt )]);
             end
             if rkhs == 1
-               histogram(Xi_rkhs(end,:),N,'Normalization','pdf','DisplayStyle','stairs','BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)]);
+               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Using RKHS at t =' num2str( (k-1)*dt )]);
             end
-       else
-            if fin == 1
-               hist(Xi_fin(end,:),N);
-            end
-            if coif == 1
-               hist(Xi_coif(end,:),N);
-            end
-            if rkhs == 1
-               hist(Xi_rkhs(end,:),N);
-            end           
        end  
        legend('show');
+       title('Posterior density p_t - Smoothed and Histogram');
     end
 end
 
@@ -258,6 +260,7 @@ figure;
 plot(0:dt:(k-1)*dt, Z(1:k),'r');
 title('Z_t');
 
+toc
 
 
 

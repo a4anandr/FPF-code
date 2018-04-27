@@ -1,15 +1,27 @@
 function [K] = gain_rkhs(Xi,c,kernel,lambda,epsilon,diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
-tic;
+% tic;
 N = length(Xi);
 
-% Evaluation of Gaussian kernel matrices 
-if kernel == 0 
+% Evaluation of kernel matrices 
+if kernel == 0  % Gaussian
    Ker         =   exp(-(ones(N,1) * Xi - Xi' * ones(1,N)).^2/(4 * epsilon));        
    Ker_x       = -(ones(N,1) * Xi - Xi' * ones(1,N))/ (2 * epsilon) .* Ker;
    Ker_x_y     = (ones(N,N) - (ones(N,1) * Xi - Xi' * ones(1,N)).^2 /(2 * epsilon))/(2 * epsilon) .* Ker;
-else
+   
+elseif kernel == 1  % Approximate Coifman basis, choosing epsilon = 0
     
+    g         =  exp(-(ones(N,1) * Xi - Xi' * ones(1,N)).^2/(4 * epsilon));  % Basic Gaussian kernel for constructing Coifman kernel
+    
+    alpha_hat_y = sqrt(exp);
+    beta_hat_x  = sqrt(p_x);
+
+    tau_hat_x_y = (1/beta_hat_x) * g_x_y * alpha_hat_y;
+    grad_tau_hat_x_y = ((y-x)/(2*epsilon) + del_Utot_mf(x)/2)*tau_hat_x_y;
+
+    tau_hat_mf = matlabFunction(tau_hat_x_y);
+    grad_tau_hat_mf = matlabFunction(grad_tau_hat_x_y);
+
 end
     
 % Constructing block matrices for future use
@@ -41,7 +53,7 @@ end
          K_beta_dot_mi(pi)  = K_beta_dot_mi(pi) - beta_m(pj)  * Ker_x_y(pj,pi);
      end
  end
-toc 
+% toc 
  
 if diag == 1
     figure;

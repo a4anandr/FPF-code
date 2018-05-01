@@ -20,7 +20,7 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 0;           % Computes gain using Coifman kernel method
+coif  = 1;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
 
 %% FPF parameters
@@ -41,9 +41,9 @@ end
 
 % iii) RKHS
 if rkhs == 1
-   kernel   = 0;        % 0 for Gaussian kernel, 1 for Coifman kernel
-   lambda   = 0.01;     % Regularization parameter - Other tried values ( 0.005) 
-   eps_rkhs = 0.1;      % Variance parameter of the kernel  - Other tried values (0.25)
+   kernel   = 1;           % 0 for Gaussian kernel, 1 for Coifman kernel
+   lambda   = 1e-5;        % Regularization parameter - Other tried values ( 0.005,0.001,0.05) 
+   eps_rkhs = 0.05;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For Coifman kernel 0.05 is best
 end
 
 %% Parameters corresponding to the state and observation processes
@@ -61,7 +61,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.1 0.1]; 
+sigma = [0.4 0.4]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -70,7 +70,6 @@ w(m)  = 1 - sum(w(1:m-1));
 sdt = sqrt(dt);
 
 c_x = matlabFunction(c);
-
 
 %% State and observation process
 % Initialization
@@ -189,7 +188,7 @@ for k = 2: 1: (T/dt)
        end
        
        figure(100);
-       plot(range, p_t,'DisplayName',['Using exact at t = ' num2str( (k-1)*dt )]);
+       plot(range, p_t,'DisplayName',['Smoothed density using exact at t = ' num2str( (k-1)*dt )]);
        hold on;
        v = version('-release');
        if (v == '2014a')
@@ -206,13 +205,13 @@ for k = 2: 1: (T/dt)
             if fin == 1
              % CAUTION : histogram command works only in recent Matlab
              % versions, if it does not work, comment this section out
-               histogram(Xi_fin(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Using finite at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_fin(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using finite at t =' num2str( (k-1)*dt )]);
             end
             if coif == 1
-               histogram(Xi_coif(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Using Coifman at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_coif(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using Coifman at t =' num2str( (k-1)*dt )]);
             end
             if rkhs == 1
-               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Using RKHS at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using RKHS at t =' num2str( (k-1)*dt )]);
             end
        end  
        legend('show');

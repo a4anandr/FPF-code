@@ -20,7 +20,7 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 1;           % Computes gain using Coifman kernel method
+coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
 
 %% FPF parameters
@@ -42,9 +42,13 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.05;        % Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 0.02;        % Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
 end
+
+% Setting a max and min threshold for gain
+K_max = 100;
+K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -61,7 +65,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.4 0.4]; 
+sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -145,6 +149,7 @@ for k = 2: 1: (T/dt)
            mu_coif(k-1)     = mean(Xi_coif(k-1,:));
            c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
            dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
+           K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
            Xi_coif(k,i)     = Xi_coif(k-1,i) + a * Xi_coif(k-1,i) * dt + sigmaB * sdt * randn + (1 / sigmaW^2) * K_coif(k,i) * dI_coif(k);
        end
        
@@ -153,6 +158,7 @@ for k = 2: 1: (T/dt)
            mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
            c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
            dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
+           K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a * Xi_rkhs(k-1,i) * dt + sigmaB * sdt * randn + (1 / sigmaW^2) * K_rkhs(k,i) * dI_rkhs(k);
        end
        

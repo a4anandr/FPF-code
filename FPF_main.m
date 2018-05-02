@@ -22,6 +22,7 @@ exact = 1;           % Computes the exact gain and plots
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
+kalman = 1;          % Runs Kalman Filter for comparison
 
 %% FPF parameters
 
@@ -65,7 +66,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.1 0.1]; 
+sigma = [0.4 0.4]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -75,32 +76,42 @@ sdt = sqrt(dt);
 
 c_x = matlabFunction(c);
 
-%% State and observation process
-% Initialization
-X(1)   = mu(2);
-Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
-
-% Initializing N particles for FPF from p(0)
+%% Initializing N particles for FPF from p(0)
 gmobj = gmdistribution(mu',reshape(sigma.^2,1,1,m),w);
 Xi_0  = random(gmobj,N);
 Xi_0  = Xi_0';            % To be consistent with code below
 Xi_0  = sort(Xi_0);       % Sort the samples in ascending order for better visualization.
 mui_0   = mean(Xi_0);
 
-Xi_exact(1,:)= Xi_0;      % Initializing the particles for all 3 approaches with the same set
+Xi_exact(1,:)= Xi_0;      % Initializing the particles for all 4 approaches with the same set
 Xi_fin(1,:)  = Xi_0;      
 Xi_coif(1,:) = Xi_0;
 Xi_rkhs(1,:) = Xi_0;   
 
+%% Kalman filter - Initialization
+if kalman == 1
+    mu_0    = 0;
+    P_0     = 0; 
+    for i = 1:length(mu)
+        mu_0 = mu_0 + w(i) * mu(i);
+        P_0  = P_0  + w(i) * ( mu(i)^2 + sigma(i)^2);
+    end
+    X_kal        = mu_0;         % Initializing the Kalman filter state estimate to the mean at t = 0.
+    P(1)         = P_0 - mu_0^2; % Initializing the state covariance for the Kalman filter 
+    Q            = sigmaB^2;     % State process noise variance
+    R            = sigmaW^2;     % Observation process noise variance 
+    K_kal(1)     = (P(1) * diff(c))/R; 
+end
+
+%% Making it a 3 component Gaussian mixture for EM to make sure gain does not blow up.
 mu_em = [0 mu];
 sigma_em = [0 sigma];
 w_em = [0 w];
 
-mu_rkhs = [0 mu];
-sigma_rkhs = [0 sigma];
-w_rkhs = [0 w];
-
 %% State and observation process evolution
+% Initialization
+X(1)   = mu(2);
+Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
     k
@@ -133,7 +144,7 @@ for k = 2: 1: (T/dt)
            mu_exact(k-1)    = mean(Xi_exact(k-1,:));
            c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
            dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
-           Xi_exact(k,i)    = Xi_exact(k-1,i) + a * Xi_exact(k-1,i) * dt + sigmaB * sdt * randn + (1/ sigmaW^2) * K_exact(k,i) * dI_exact(k);
+           Xi_exact(k,i)    = Xi_exact(k-1,i) + a * Xi_exact(k-1,i) * dt + sigmaB * sdt * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
        end
        
        % ii) Finite dimensional basis 
@@ -141,7 +152,7 @@ for k = 2: 1: (T/dt)
            mu_fin(k-1)      = mean(Xi_fin(k-1,:));
            c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
            dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
-           Xi_fin(k,i)      = Xi_fin(k-1,i) + a * Xi_fin(k-1,i) * dt + sigmaB * sdt * randn + (1/ sigmaW^2) * K_fin(k,i) * dI_fin(k);
+           Xi_fin(k,i)      = Xi_fin(k-1,i) + a * Xi_fin(k-1,i) * dt + sigmaB * sdt * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
        end
        
        % iii) Coifman kernel
@@ -150,7 +161,7 @@ for k = 2: 1: (T/dt)
            c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
            dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
-           Xi_coif(k,i)     = Xi_coif(k-1,i) + a * Xi_coif(k-1,i) * dt + sigmaB * sdt * randn + (1 / sigmaW^2) * K_coif(k,i) * dI_coif(k);
+           Xi_coif(k,i)     = Xi_coif(k-1,i) + a * Xi_coif(k-1,i) * dt + sigmaB * sdt * randn + (1 / R) * K_coif(k,i) * dI_coif(k);
        end
        
        % iv) RKHS
@@ -159,10 +170,17 @@ for k = 2: 1: (T/dt)
            c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
            dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
-           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a * Xi_rkhs(k-1,i) * dt + sigmaB * sdt * randn + (1 / sigmaW^2) * K_rkhs(k,i) * dI_rkhs(k);
+           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a * Xi_rkhs(k-1,i) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
-       
+              
     end
+    
+ % v) Basic Kalman Filter for comparison
+ if kalman == 1
+      P(k)    = P(k-1)+ 2 * a * P(k-1) * dt+ Q * dt - (K_kal(k-1)^2) * R * dt;     % Evolution of covariance
+      K_kal(k)= (P(k)* diff(c) )/R;                                       % Computation of Kalman Gain
+      X_kal(k)= X_kal(k-1) + a * X_kal(k-1) * dt + K_kal(k) * (dZ(k-1) - diff(c) * X_kal(k-1) * dt);  % Kalman Filtered state estimate   
+ end
 
 %% Displaying figures for diagnostics 
 
@@ -196,10 +214,14 @@ for k = 2: 1: (T/dt)
        for i = 1: length(mu_em)
            p_t = p_t + w_em(i) * exp(-( range - mu_em(i)).^2 / (2 * sigma_em(i)^2)) * (1 / sqrt(2 * pi * sigma_em(i)^2));
        end
-       
+                  
        figure(100);
        plot(range, p_t,'DisplayName',['Smoothed density using exact at t = ' num2str( (k-1)*dt )]);
        hold on;
+       if kalman == 1
+           p_kal_t = exp(-( range - X_kal(k)).^2 / (2 * P(k))) * (1 / sqrt(2 * pi * P(k)));
+           plot(range, p_kal_t,'DisplayName',['Kalman estimate at t = ' num2str( (k-1)*dt )]);
+       end
        v = version('-release');
        if (v == '2014a')
             if fin == 1
@@ -262,12 +284,28 @@ if rkhs == 1
     plot(0:dt:(k-1)*dt, mu_rkhs(1:k),'k--','DisplayName','RKHS');
     hold on;
 end
+if kalman == 1
+    plot(0:dt:(k-1)*dt, X_kal(1:k),'c--','DisplayName','Kalman');
+    hold on;
+end
 legend('show');
 
 
 figure;
 plot(0:dt:(k-1)*dt, Z(1:k),'r');
 title('Z_t');
+
+if kalman == 1
+    figure;
+    plot(0:dt:(k-1)*dt, K_kal(1:k),'r');
+    title('Kalman Gain K_t');
+    
+    figure;
+    plot(0:dt:(k-1)*dt, P(1:k),'r');
+    hold on;
+    title('State Covariance P_t');
+    
+end
 
 toc
 

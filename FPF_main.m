@@ -41,9 +41,9 @@ end
 
 % iii) RKHS
 if rkhs == 1
-   kernel   = 1;           % 0 for Gaussian kernel, 1 for Coifman kernel
-   lambda   = 1e-5;        % Regularization parameter - Other tried values ( 0.005,0.001,0.05) 
-   eps_rkhs = 0.05;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For Coifman kernel 0.05 is best
+   kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
+   lambda   = 0.05;        % Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
 end
 
 %% Parameters corresponding to the state and observation processes
@@ -92,6 +92,10 @@ mu_em = [0 mu];
 sigma_em = [0 sigma];
 w_em = [0 w];
 
+mu_rkhs = [0 mu];
+sigma_rkhs = [0 sigma];
+w_rkhs = [0 w];
+
 %% State and observation process evolution
 
 for k = 2: 1: (T/dt)
@@ -116,7 +120,7 @@ for k = 2: 1: (T/dt)
         [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
     end 
     if rkhs == 1
-        [K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, diag_fn);
+        [K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs,diag_fn);
     end
         
     for i = 1:N

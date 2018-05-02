@@ -43,7 +43,7 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.02;        % Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 0.05;        % 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
 end
 
@@ -57,8 +57,8 @@ T   = 0.8;       % Total running time - Using same values as in Amir's CDC paper
 dt  = 0.01;      % Time increments for the SDE
 
 % State process parameters
-a = 0;         % 0 for a steady state process
-sigmaB = 0;      % No noise in state process
+a = -1;         % 0 for a steady state process
+sigmaB = 0.3;      % No noise in state process
 
 % Observation process parameters
 c = x;
@@ -66,7 +66,7 @@ sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.4 0.4]; 
+sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -178,7 +178,7 @@ for k = 2: 1: (T/dt)
  % v) Basic Kalman Filter for comparison
  if kalman == 1
       P(k)    = P(k-1)+ 2 * a * P(k-1) * dt+ Q * dt - (K_kal(k-1)^2) * R * dt;     % Evolution of covariance
-      K_kal(k)= (P(k)* diff(c) )/R;                                       % Computation of Kalman Gain
+      K_kal(k)= (P(k)* diff(c) )/R;                                                % Computation of Kalman Gain
       X_kal(k)= X_kal(k-1) + a * X_kal(k-1) * dt + K_kal(k) * (dZ(k-1) - diff(c) * X_kal(k-1) * dt);  % Kalman Filtered state estimate   
  end
 
@@ -188,11 +188,11 @@ for k = 2: 1: (T/dt)
     if ( diag_main == 1 && ( k == 2 | k == 3 | k == 11 || k == 21 || k == 31 || k == (T/dt))) 
         figure;
         if exact == 1
-            plot(Xi_exact(k-1,:), K_exact(k,:), 'gv','DisplayName','Exact'); 
+            plot(Xi_exact(k-1,:), K_exact(k,:), 'rv','DisplayName','Exact'); 
             hold on;
         end
         if fin == 1
-            plot(Xi_fin(k-1,:), K_fin(k,:), 'r*', 'DisplayName','Finite');  
+            plot(Xi_fin(k-1,:), K_fin(k,:), 'g*', 'DisplayName','Finite');  
             hold on;
         end
         if coif == 1
@@ -269,11 +269,11 @@ figure;
 plot(0:dt:(k-1)*dt, X(1:k),'k','DisplayName','Actual state');
 hold on;
 if exact == 1
-    plot(0:dt:(k-1)*dt, mu_exact(1:k),'g--','DisplayName','Exact');
+    plot(0:dt:(k-1)*dt, mu_exact(1:k),'r--','DisplayName','Exact');
     hold on;
 end
 if fin == 1
-    plot(0:dt:(k-1)*dt, mu_fin(1:k),'r--','DisplayName','Finite');
+    plot(0:dt:(k-1)*dt, mu_fin(1:k),'g--','DisplayName','Finite');
     hold on;
 end
 if coif == 1
@@ -289,6 +289,7 @@ if kalman == 1
     hold on;
 end
 legend('show');
+title(['a =' num2str(a) ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW)]);
 
 
 figure;

@@ -3,7 +3,8 @@
 % - Defines the prior distribution p(0) 
 % - Generates particles Xi from the prior p(0)
 % - Passes these particles Xi to four different gain function approximation
-% functions - i) diff TD learning (old), ii) finite dim, iii) Coifman kernel, iv) RKHS
+% functions - i) diff TD learning (old), ii) finite dim, iii) Coifman
+% kernel, iv) RKHS v) Kalman filter
 % based.
 
 clear;
@@ -20,7 +21,7 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 0;           % Computes gain using Coifman kernel method
+coif  = 1;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
 kalman = 1;          % Runs Kalman Filter for comparison
 
@@ -43,7 +44,7 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.05;        % 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 0.05;         % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
 end
 
@@ -53,12 +54,12 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 0.8;       % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 2;       % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;      % Time increments for the SDE
 
 % State process parameters
-a = -1;         % 0 for a steady state process
-sigmaB = 0.3;      % No noise in state process
+a = 0;         % 0 for a steady state process
+sigmaB = 0;      % No noise in state process
 
 % Observation process parameters
 c = x;

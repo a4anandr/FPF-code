@@ -6,6 +6,7 @@ function [mu, sigma, w] = em_gmm (Xi, mu, sigma, w, diag)
 N = length(Xi);
 epsilon = 0.01;
 w0_thresh=0.05;    % Other tried values - (0.1)
+sigma_thresh = 0.05;
 
 % Means of the 3 component Gaussians
 mu_em(1)    = mean(Xi);           % Mean of the first component is the ensemble mean - Don't change this in this function
@@ -78,10 +79,10 @@ while (norm(diff_mu) > epsilon| norm(diff_w) > epsilon)
      %% Standard deviations
      for i = 2:length(mu)
          if(sum(pj(i,:))==0)
-            sigma_em_new(i) = max(sigma_em(i),0.1);
+            sigma_em_new(i) = max(sigma_em(i),sigma_thresh);
          else
             sigma_em_new(i) = sqrt(pj(i,:)*((Xi - mu_em_new(i)).^2)'/ sum(pj(i,:)));        
-            sigma_em_new(i) = max(sigma_em_new(i),0.1);
+            sigma_em_new(i) = max(sigma_em_new(i),sigma_thresh);
          end
      end
     

@@ -21,7 +21,7 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 1;           % Computes gain using Coifman kernel method
+coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
 kalman = 1;          % Runs Kalman Filter for comparison
 
@@ -44,8 +44,10 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.05;         % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 0.05;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_gain = 0;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   beta     = ones(N,1);   % Initializing weights to a 1 vector, this value is used only at k = 1. 
 end
 
 % Setting a max and min threshold for gain
@@ -54,12 +56,12 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 2;       % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 0.8;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;      % Time increments for the SDE
 
 % State process parameters
-a = 0;         % 0 for a steady state process
-sigmaB = 0;      % No noise in state process
+a = 0;           % 0 for a steady state process
+sigmaB = 0;      % 0 if no noise in state process
 
 % Observation process parameters
 c = x;
@@ -116,6 +118,7 @@ Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
     k
+    
     X(k) = X(k-1) +   a * X(k-1) * dt + sigmaB * sdt * randn;
     Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
     
@@ -126,17 +129,25 @@ for k = 2: 1: (T/dt)
     end
     
     if exact == 1
-        [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);
-        [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );
+        [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
+        [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
     end
+    
     if fin == 1
         [K_fin(k,:)  ] = gain_fin(Xi_fin(k-1,:), c_x, d , basis, mu, sigma, p, diag_fn);
     end
+    
     if coif == 1
         [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
     end 
+    
     if rkhs == 1
-        [K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs,diag_fn);
+        if k == 2
+            alpha = 0;
+        else
+            alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+        end
+        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, beta, diag_fn);
     end
         
     for i = 1:N

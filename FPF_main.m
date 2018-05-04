@@ -46,8 +46,8 @@ if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
    lambda   = 0.05;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
-   lambda_gain = 0;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
-   beta     = ones(N,1);   % Initializing weights to a 1 vector, this value is used only at k = 1. 
+   lambda_gain = 1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
 % Setting a max and min threshold for gain
@@ -60,8 +60,8 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;      % Time increments for the SDE
 
 % State process parameters
-a = 0;           % 0 for a steady state process
-sigmaB = 0;      % 0 if no noise in state process
+a = -2;           % 0 for a steady state process
+sigmaB = 0.5;      % 0 if no noise in state process
 
 % Observation process parameters
 c = x;
@@ -147,7 +147,7 @@ for k = 2: 1: (T/dt)
         else
             alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
-        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, beta, diag_fn);
+        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
     end
         
     for i = 1:N

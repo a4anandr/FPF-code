@@ -1,4 +1,4 @@
-function [beta_m K] = gain_rkhs( Xi , c , kernel, lambda, epsilon, alpha, beta_prev, diag)
+function [beta_m K] = gain_rkhs( Xi , c , kernel, lambda, epsilon, alpha, K_prev, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
 % tic;
 N = length(Xi);
@@ -59,7 +59,7 @@ end
  eta   = mean(c(Xi));
  Y           =  (H - eta)';
 % b used in simplified algorithm - searching on a smaller subspace of the Hilbert space H
- b_m         =  (1/N) * ( Ker * Y + alpha * Ker_x * Ker_x' * beta_prev); 
+ b_m         =  (1/N) * ( Ker * Y + alpha * Ker_x' * K_prev'); 
 
 if simplified == 0
      % Constructing block matrices for future use
@@ -71,7 +71,7 @@ if simplified == 0
     M_2m = lambda * K_big + (1/N) * K_thin_yxy * K_thin_yxy';
     beta_2m = M_2m \ b_2m;   
 else
-    M_m  = lambda * Ker + ((1 + alpha)/ N) * Ker_x * Ker_x';
+    M_m  = lambda * Ker + ((1 + alpha)/ N) * Ker_x' * Ker_x;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
     beta_m  = M_m \ b_m;
 end  
         

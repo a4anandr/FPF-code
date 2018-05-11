@@ -17,6 +17,12 @@ diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(3000);        % Set a common seed
 
+C_rate_profile = csvread('t_vs_load_C_rate_constant.csv',1,0); % FOR EKF, discharge current is positive [Amps] load current flowing through external circuit. For LIONSIMBA,discharge current is negative
+I_1C         = 60; % Amps (1C current of the cell, i.e. cell capacity in disguise). Used only for desktop-simulation purposes.
+soc_init_pct = 50; % (percentage) Starting SoC
+
+param_spm = Parameters_spm(soc_init_pct);
+
 %% Flags to be set to choose which methods to compare
 
 exact = 0;           % Computes the exact gain and plots 
@@ -60,15 +66,6 @@ K_min = -100;
 T   = 0.8;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;        % Time increments for the SDE
 
-% State process parameters
-% a = -2 * x;           % 0 for a steady state process
-if a == 0
-    a_x     = @(x) 0;
-    a_der_x = @(x) 0;
-else
-    a_x     = @(x) eval(a);
-    a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
-end
 sigmaB = 0;             % 0 if no noise in state process
 
 % Observation process parameters
@@ -132,8 +129,9 @@ Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
     k
-    
-    X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
+    I_load = interp1(C_rate_profile(:,1),C_rate_profile(:,2),k*dt,'previous','extrap')*I_1C;
+
+    X(k) = X(k-1) +   a_spm(param_spm,X(k-1),I_load) * dt + sigmaB * sdt * randn;
     Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
     
     if k == 2 

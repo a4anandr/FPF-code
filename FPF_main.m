@@ -67,12 +67,9 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;        % Time increments for the SDE
 
 sigmaB = 0;             % 0 if no noise in state process
+I_load_init = interp1(C_rate_profile(:,1),C_rate_profile(:,2),0,'previous','extrap')*I_1C;
 
-% Observation process parameters
-c = x;
-c_x = matlabFunction(c);
-c_for_der_x = @(x) eval(c);
-c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
+c_x = @spm_battery_voltage;
 sigmaW = 0.3;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
@@ -102,7 +99,7 @@ Xi_rkhs(1,:) = Xi_0;
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
 Wi_sis(1,:)  = (1/N) * ones(1,N);
-Zi_sis(1,:)  = c_x(Xi_sis(1,:)) * dt;
+Zi_sis(1,:)  = c_x(Xi_sis(1,:),I_load_init,param_spm) * dt;
 
 %% Kalman filter - Initialization
 if kalman == 1
@@ -124,15 +121,15 @@ w_em = [0 w];
 
 %% State and observation process evolution
 % Initialization
-X(1)   = mu(2);
-Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
+X(1)   = param_spm.cs_p_init;  % + Gaussian 
+Z(1)   = c_x(X(1),I_load_init,param_spm) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
     k
     I_load = interp1(C_rate_profile(:,1),C_rate_profile(:,2),k*dt,'previous','extrap')*I_1C;
 
     X(k) = X(k-1) +   a_spm(param_spm,X(k-1),I_load) * dt + sigmaB * sdt * randn;
-    Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
+    Z(k) = Z(k-1) +   c_x(X(k),I_load,param_spm)  * dt + sigmaW * sdt * randn; 
     
     if k == 2 
         dZ(k) = Z(k) - Z(k-1); 
@@ -166,24 +163,24 @@ for k = 2: 1: (T/dt)
        % i) Using exact solution of gain
        if exact == 1
            mu_exact(k-1)    = mean(Xi_exact(k-1,:));
-           c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
-           dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
+           c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:),I_load,param_spm));
+           dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i),I_load,param_spm) + c_hat_exact(k-1)) * dt;
            Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
        end
        
        % ii) Finite dimensional basis 
        if fin == 1
            mu_fin(k-1)      = mean(Xi_fin(k-1,:));
-           c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
-           dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
+           c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:),I_load,param_spm));
+           dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i),I_load,param_spm) + c_hat_fin(k-1)) * dt;
            Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
        end
        
        % iii) Coifman kernel
        if coif == 1
            mu_coif(k-1)     = mean(Xi_coif(k-1,:));
-           c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
-           dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
+           c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:),I_load,param_spm));
+           dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i),I_load,param_spm) + c_hat_coif(k-1)) * dt;
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
            Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_coif(k,i) * dI_coif(k);
        end
@@ -191,8 +188,8 @@ for k = 2: 1: (T/dt)
        % iv) RKHS
        if rkhs == 1
            mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
-           c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
-           dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
+           c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:),I_load,param_spm));
+           dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i),I_load,param_spm) + c_hat_rkhs(k-1)) * dt;
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
@@ -201,7 +198,7 @@ for k = 2: 1: (T/dt)
        if sis == 1
           mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
-          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
+          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i),I_load,param_spm)   * dt; 
           Wi_sis(k,i)       = (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));
        end
               
@@ -211,7 +208,7 @@ for k = 2: 1: (T/dt)
     
  % v) Basic Kalman Filter for comparison
  if kalman == 1
-      X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1)) * dt + K_kal(k-1) * (dZ(k-1) - c_x(X_kal(k-1)) * dt);  % Kalman Filtered state estimate   
+      X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1)) * dt + K_kal(k-1) * (dZ(k-1) - c_x(X_kal(k-1),I_load,param_spm) * dt);  % Kalman Filtered state estimate   
       P(k)    = P(k-1)+ 2 * a_der_x(X_kal(k-1)) * P(k-1) * dt+ Q * dt - (K_kal(k-1)^2) * R * dt;     % Evolution of covariance
       K_kal(k)= (P(k)* c_der_x(X_kal(k-1)))/R;                                                % Computation of Kalman Gain     
  end

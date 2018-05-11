@@ -19,11 +19,12 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 %% Flags to be set to choose which methods to compare
 
-exact = 1;           % Computes the exact gain and plots 
+exact = 0;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
 kalman = 1;          % Runs Kalman Filter for comparison
+sis    = 1; 
 
 %% FPF parameters
 
@@ -57,17 +58,18 @@ K_min = -100;
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
 T   = 0.8;         % Total running time - Using same values as in Amir's CDC paper - 0.8
-dt  = 0.01;      % Time increments for the SDE
+dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = -2 * x;
-a_x = @(x) eval(a);           % 0 for a steady state process
-if a_x(x) == 0
+a = -2 * x;           % 0 for a steady state process
+if a == 0
+    a_x     = @(x) 0;
     a_der_x = @(x) 0;
 else
+    a_x = @(x) eval(a);
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
 end
-sigmaB = 0.3;             % 0 if no noise in state process
+sigmaB = 0;             % 0 if no noise in state process
 
 % Observation process parameters
 c = x;
@@ -85,6 +87,8 @@ w(m)  = 1 - sum(w(1:m-1));
 
 %% Additional variables 
 sdt = sqrt(dt);
+Q    = sigmaB^2;     % State process noise variance
+R    = sigmaW^2;     % Observation process noise variance 
 
 %% Initializing N particles for FPF from p(0)
 gmobj = gmdistribution(mu',reshape(sigma.^2,1,1,m),w);
@@ -101,6 +105,7 @@ Xi_rkhs(1,:) = Xi_0;
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
 Wi_sis(1,:)  = (1/N) * ones(1,N);
+Zi_sis(1,:)  = c_x(Xi_sis(1,:)) * dt;
 
 %% Kalman filter - Initialization
 if kalman == 1
@@ -112,8 +117,6 @@ if kalman == 1
     end
     X_kal        = mu_0;         % Initializing the Kalman filter state estimate to the mean at t = 0.
     P(1)         = P_0 - mu_0^2; % Initializing the state covariance for the Kalman filter 
-    Q            = sigmaB^2;     % State process noise variance
-    R            = sigmaW^2;     % Observation process noise variance 
     K_kal(1)     = (P(1) * c_der_x(X_kal))/R; 
 end
 
@@ -195,8 +198,18 @@ for k = 2: 1: (T/dt)
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
+       
+       % v) Sequential Importance Sampling Particle Filter (SIS PF)
+       if sis == 1
+          mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';
+          Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
+          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
+          Wi_sis(k,i)       = (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));
+       end
               
     end
+    % Normalizing the weights of the SIS - PF
+    Wi_sis(k,:) = Wi_sis(k,:)/ sum(Wi_sis(k,:));
     
  % v) Basic Kalman Filter for comparison
  if kalman == 1
@@ -288,6 +301,9 @@ end
 if rkhs == 1
     mu_rkhs(k)      = mean(Xi_rkhs(k,:));
 end
+if sis == 1
+    mu_sis(k)       = Wi_sis(k,:) * Xi_sis(k,:)';
+end
 
 %% Plots
 figure;
@@ -311,6 +327,10 @@ if rkhs == 1
 end
 if kalman == 1
     plot(0:dt:(k-1)*dt, X_kal(1:k),'c--','DisplayName','Kalman');
+    hold on;
+end
+if sis == 1
+    plot(0:dt:(k-1)*dt, mu_sis(1:k),'m--','DisplayName','SIS');
     hold on;
 end
 legend('show');

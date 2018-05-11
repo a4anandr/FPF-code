@@ -61,12 +61,12 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = -2 * x;           % 0 for a steady state process
+% a = -2 * x;           % 0 for a steady state process
 if a == 0
     a_x     = @(x) 0;
     a_der_x = @(x) 0;
 else
-    a_x = @(x) eval(a);
+    a_x     = @(x) eval(a);
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
 end
 sigmaB = 0;             % 0 if no noise in state process

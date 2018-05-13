@@ -69,7 +69,7 @@ else
     a_x = @(x) eval(a);
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
 end
-sigmaB = 0;             % 0 if no noise in state process
+sigmaB = 0.3;             % 0 if no noise in state process
 
 % Observation process parameters
 c = x;
@@ -282,6 +282,9 @@ for k = 2: 1: (T/dt)
             end
             if rkhs == 1
                histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using RKHS at t =' num2str( (k-1)*dt )]);
+            end
+            if sis == 1
+               histogram(Xi_sis(k-1,:),
             end
        end  
        legend('show');

@@ -10,16 +10,17 @@
 clear;
 clc;
 close all;
+format short g;
 tic
 
-syms x;
+syms x u;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(3000);        % Set a common seed
 
 C_rate_profile = csvread('t_vs_load_C_rate_constant.csv',1,0); % FOR EKF, discharge current is positive [Amps] load current flowing through external circuit. For LIONSIMBA,discharge current is negative
 I_1C         = 60; % Amps (1C current of the cell, i.e. cell capacity in disguise). Used only for desktop-simulation purposes.
-soc_init_pct = 50; % (percentage) Starting SoC
+soc_init_pct = 100; % (percentage) Starting SoC
 
 param_spm = Parameters_spm(soc_init_pct);
 
@@ -29,7 +30,7 @@ exact = 0;           % Computes the exact gain and plots
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
-kalman = 1;          % Runs Kalman Filter for comparison
+kalman = 0;          % Runs Kalman Filter for comparison
 sis    = 1; 
 
 %% FPF parameters
@@ -69,11 +70,12 @@ dt  = 0.01;        % Time increments for the SDE
 sigmaB = 0;             % 0 if no noise in state process
 I_load_init = interp1(C_rate_profile(:,1),C_rate_profile(:,2),0,'previous','extrap')*I_1C;
 
-c_x = @spm_battery_voltage;
+c_x = diff(spm_battery_voltage(x,u,param_spm),x);
 sigmaW = 0.3;
 
-% Parameters of p(0) - 2 component Gaussian mixture density 
-m = 2;
+% Parameters of p(0) - 2 component Gaussian mixture density - Prior needs
+% to be initialized with the range of concentration values
+m = 2; 
 sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
@@ -99,7 +101,7 @@ Xi_rkhs(1,:) = Xi_0;
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
 Wi_sis(1,:)  = (1/N) * ones(1,N);
-Zi_sis(1,:)  = c_x(Xi_sis(1,:),I_load_init,param_spm) * dt;
+Zi_sis(1,:)  = spm_battery_voltage(Xi_sis(1,:),I_load_init,param_spm);
 
 %% Kalman filter - Initialization
 if kalman == 1
@@ -122,7 +124,7 @@ w_em = [0 w];
 %% State and observation process evolution
 % Initialization
 X(1)   = param_spm.cs_p_init;  % + Gaussian 
-Z(1)   = c_x(X(1),I_load_init,param_spm) * dt + sigmaW * sdt * randn;
+Z(1)   = spm_battery_voltage(X(1),I_load_init,param_spm) + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
     k

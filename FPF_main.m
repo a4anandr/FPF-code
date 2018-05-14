@@ -15,7 +15,7 @@ tic
 syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(3000);        % Set a common seed
+% rng(1000);        % Set a common seed
 
 %% Flags to be set to choose which methods to compare
 
@@ -45,9 +45,9 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.05;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 0.1;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
-   lambda_gain = 1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   lambda_gain = 0;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
@@ -61,7 +61,7 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = -2 * x;           % 0 for a steady state process
+a = - 2 * x;           % 0 for a steady state process
 if a == 0
     a_x     = @(x) 0;
     a_der_x = @(x) 0;
@@ -69,7 +69,7 @@ else
     a_x = @(x) eval(a);
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
 end
-sigmaB = 0.3;             % 0 if no noise in state process
+sigmaB = 0;             % 0 if no noise in state process
 
 % Observation process parameters
 c = x;
@@ -270,7 +270,7 @@ for k = 2: 1: (T/dt)
             end
             if rkhs == 1
                hist(Xi_rkhs(k-1,:),N);
-            end                      
+            end             
        else
             if fin == 1
              % CAUTION : histogram command works only in recent Matlab
@@ -283,10 +283,17 @@ for k = 2: 1: (T/dt)
             if rkhs == 1
                histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using RKHS at t =' num2str( (k-1)*dt )]);
             end
-            if sis == 1
-               histogram(Xi_sis(k-1,:),
-            end
        end  
+       if sis == 1
+           [~,ind] = sort(Xi_sis(k-1,:));
+           % plot(Xi_sis(k-1,ind),Wi_sis(k-1,ind)/step,'linewidth',2.0);
+           p_sis_t = 0;
+           sigma_sis = 0.05;
+           for i = 1 : length(Xi_sis(k-1,:))
+               p_sis_t = p_sis_t + Wi_sis(k-1,i) *  exp(- (range - Xi_sis(k-1,i)).^2 / ( 2 * sigma_sis^2)) * (1 / sqrt(2 * pi * sigma_sis^2));
+           end
+           plot(range, p_sis_t,'DisplayName',['SIS posterior at t = ' num2str( (k-1)*dt )]);
+       end
        legend('show');
        title('Posterior density p_t - Smoothed and Histogram');
     end

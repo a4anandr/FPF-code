@@ -61,7 +61,8 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = - 2 * x;           % 0 for a steady state process
+% a = - 2 * x;           % 0 for a steady state process
+a = 0; 
 if a == 0
     a_x     = @(x) 0;
     a_der_x = @(x) 0;
@@ -72,7 +73,7 @@ end
 sigmaB = 0;             % 0 if no noise in state process
 
 % Observation process parameters
-c = x;
+c =  5 * x;
 c_x = matlabFunction(c);
 c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
@@ -204,7 +205,7 @@ for k = 2: 1: (T/dt)
           mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
-          Wi_sis(k,i)       = (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));
+          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Not sure if multiplication by Wi_sis(k-1,:) is required
        end
               
     end

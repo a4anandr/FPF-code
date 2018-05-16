@@ -73,7 +73,7 @@ end
 sigmaB = 0;             % 0 if no noise in state process
 
 % Observation process parameters
-c =  5 * x;
+c =  x;
 c_x = matlabFunction(c);
 c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
@@ -146,14 +146,20 @@ for k = 2: 1: (T/dt)
     if exact == 1
         [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
         [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
+        mu_exact(k-1)    = mean(Xi_exact(k-1,:));         % Suspect these two lines need to be outside the for loop with N
+        c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
     end
     
     if fin == 1
         [K_fin(k,:)  ] = gain_fin(Xi_fin(k-1,:), c_x, d , basis, mu, sigma, p, diag_fn);
+        mu_fin(k-1)      = mean(Xi_fin(k-1,:));
+        c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
     end
     
     if coif == 1
         [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
+        mu_coif(k-1)     = mean(Xi_coif(k-1,:));
+        c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
     end 
     
     if rkhs == 1
@@ -163,29 +169,29 @@ for k = 2: 1: (T/dt)
             alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
         [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
+        mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
+        c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
+    end
+    
+    if sis == 1
+        mu_sis(k-1)       = Wi_sis(k-1,:)* Xi_sis(k-1,:)';
     end
         
     for i = 1:N
        % i) Using exact solution of gain
        if exact == 1
-           mu_exact(k-1)    = mean(Xi_exact(k-1,:));
-           c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
            dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
            Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
        end
        
        % ii) Finite dimensional basis 
        if fin == 1
-           mu_fin(k-1)      = mean(Xi_fin(k-1,:));
-           c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
            dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
            Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
        end
        
        % iii) Coifman kernel
        if coif == 1
-           mu_coif(k-1)     = mean(Xi_coif(k-1,:));
-           c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
            dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
            Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_coif(k,i) * dI_coif(k);
@@ -193,8 +199,6 @@ for k = 2: 1: (T/dt)
        
        % iv) RKHS
        if rkhs == 1
-           mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
-           c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
            dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
@@ -202,15 +206,16 @@ for k = 2: 1: (T/dt)
        
        % v) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
-          mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
           Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Not sure if multiplication by Wi_sis(k-1,:) is required
        end
               
     end
+    if sis == 1
     % Normalizing the weights of the SIS - PF
-    Wi_sis(k,:) = Wi_sis(k,:)/ sum(Wi_sis(k,:));
+        Wi_sis(k,:) = Wi_sis(k,:)/ sum(Wi_sis(k,:));
+    end
     
  % v) Basic Kalman Filter for comparison
  if kalman == 1
@@ -253,12 +258,12 @@ for k = 2: 1: (T/dt)
           for i = 1: length(mu_em)
               p_t = p_t + w_em(i) * exp(-( range - mu_em(i)).^2 / (2 * sigma_em(i)^2)) * (1 / sqrt(2 * pi * sigma_em(i)^2));
           end
-          plot(range, p_t,'DisplayName',['Smoothed density using exact at t = ' num2str( (k-1)*dt )]);
+          plot(range, p_t,'DisplayName',['Using exact p_t at t = ' num2str( (k-1)*dt )]);
           hold on;
        end
        if kalman == 1
            p_kal_t = exp(-( range - X_kal(k)).^2 / (2 * P(k))) * (1 / sqrt(2 * pi * P(k)));
-           plot(range, p_kal_t,'DisplayName',['Kalman estimate at t = ' num2str( (k-1)*dt )]);
+           plot(range, p_kal_t,'DisplayName',['Using Kalman p_t at t = ' num2str( (k-1)*dt )]);
            hold on;
        end
        v = version('-release');
@@ -276,13 +281,13 @@ for k = 2: 1: (T/dt)
             if fin == 1
              % CAUTION : histogram command works only in recent Matlab
              % versions, if it does not work, comment this section out
-               histogram(Xi_fin(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using finite at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_fin(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using finite at t =' num2str( (k-1)*dt )]);
             end
             if coif == 1
-               histogram(Xi_coif(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using Coifman at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_coif(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using Coifman at t =' num2str( (k-1)*dt )]);
             end
             if rkhs == 1
-               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Histogram using RKHS at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS at t =' num2str( (k-1)*dt )]);
             end
        end  
        if sis == 1
@@ -293,7 +298,7 @@ for k = 2: 1: (T/dt)
            for i = 1 : length(Xi_sis(k-1,:))
                p_sis_t = p_sis_t + Wi_sis(k-1,i) *  exp(- (range - Xi_sis(k-1,i)).^2 / ( 2 * sigma_sis^2)) * (1 / sqrt(2 * pi * sigma_sis^2));
            end
-           plot(range, p_sis_t,'DisplayName',['SIS posterior at t = ' num2str( (k-1)*dt )]);
+           plot(range, p_sis_t,'DisplayName',['Using SIS PF p_t at t = ' num2str( (k-1)*dt )]);
        end
        legend('show');
        title('Posterior density p_t - Smoothed and Histogram');
@@ -345,7 +350,7 @@ if sis == 1
     hold on;
 end
 legend('show');
-title(['a =' char(a) ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW)]);
+title(['a =' char(a) ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW) ', c = ' char(c) ]);
 
 
 figure;

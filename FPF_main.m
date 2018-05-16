@@ -61,19 +61,21 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-% a = - 2 * x;           % 0 for a steady state process
-a = 0; 
+a = - 2 * x;           % 0 for a steady state process
+% a = 0; 
 if a == 0
-    a_x     = @(x) 0;
-    a_der_x = @(x) 0;
+    a_x      = @(x) 0;
+    a_der_x  = @(x) 0;
+    a_legend = num2str(a);
 else
     a_x = @(x) eval(a);
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
+    a_legend = char(a);
 end
 sigmaB = 0;             % 0 if no noise in state process
 
 % Observation process parameters
-c =  x;
+c =  0.25 * x;
 c_x = matlabFunction(c);
 c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
@@ -175,6 +177,7 @@ for k = 2: 1: (T/dt)
     
     if sis == 1
         mu_sis(k-1)       = Wi_sis(k-1,:)* Xi_sis(k-1,:)';
+        N_eff_sis(k-1)    =  1 / sum(Wi_sis(k-1,:).^2);
     end
         
     for i = 1:N
@@ -214,7 +217,8 @@ for k = 2: 1: (T/dt)
     end
     if sis == 1
     % Normalizing the weights of the SIS - PF
-        Wi_sis(k,:) = Wi_sis(k,:)/ sum(Wi_sis(k,:));
+        Wi_sis(k,:)  = Wi_sis(k,:)/ sum(Wi_sis(k,:));
+        N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
     end
     
  % v) Basic Kalman Filter for comparison
@@ -249,7 +253,7 @@ for k = 2: 1: (T/dt)
         legend('show');
     end
     
-    if ( diag_main == 1 && (k == 2 || k == (T/dt)))
+    if ( k == 2 || k == (T/dt))
         step = 0.05;
         range = min(mu_em)- 3 * max(sigma_em): step : max(mu_em) + 3 * max(sigma_em);
         figure(100);
@@ -350,22 +354,31 @@ if sis == 1
     hold on;
 end
 legend('show');
-title(['a =' char(a) ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW) ', c = ' char(c) ]);
+title(['a =' a_legend ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW) ', c = ' char(c) ]);
 
 
 figure;
 plot(0:dt:(k-1)*dt, Z(1:k),'r');
 title('Z_t');
 
-if kalman == 1
-    figure;
-    plot(0:dt:(k-1)*dt, K_kal(1:k),'r');
-    title('Kalman Gain K_t');
+if diag_main == 1
+    if kalman == 1
+        figure;
+        plot(0:dt:(k-1)*dt, K_kal(1:k),'r');
+        title('Kalman Gain K_t');
     
-    figure;
-    plot(0:dt:(k-1)*dt, P(1:k),'r');
-    hold on;
-    title('State Covariance P_t');
+        figure;
+        plot(0:dt:(k-1)*dt, P(1:k),'r');
+        hold on;
+        title('State Covariance P_t');
+    end
+    
+    if sis == 1
+        figure;
+        plot(0:dt:(k-1)*dt, N_eff_sis(1:k),'r');
+        hold on;
+        title('Effective particle size N_{eff} in SIS PF');
+    end
     
 end
 

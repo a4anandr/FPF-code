@@ -202,10 +202,10 @@ for k = 2: 1: (T/dt)
        
        % v) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
-          mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';
+          mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';     
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
-          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Not sure if multiplication by Wi_sis(k-1,:) is required
+          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Based on eqn (63) of Arulampalam et al. Because the importance density is chosen to be the prior p(X_t | X_{t-1}) 
        end
               
     end

@@ -53,7 +53,7 @@ end
 
 % Setting a max and min threshold for gain
 K_max = 100;
-K_min = -100;
+K_min = 0.2;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters

@@ -72,10 +72,10 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0;             % 0 if no noise in state process
+sigmaB = 0.3;             % 0 if no noise in state process
 
 % Observation process parameters
-c =  0.25 * x;
+c =  x;
 c_x = matlabFunction(c);
 c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);

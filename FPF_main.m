@@ -15,7 +15,7 @@ tic
 syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(1000);        % Set a common seed
+rng(1000);        % Set a common seed
 
 %% Flags to be set to choose which methods to compare
 
@@ -72,7 +72,8 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0.3;             % 0 if no noise in state process
+sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+% If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
 c =  x;
@@ -211,7 +212,7 @@ for k = 2: 1: (T/dt)
        if sis == 1
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
-          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Not sure if multiplication by Wi_sis(k-1,:) is required
+          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Based on eqn(63) of Arulampalam et al. In our example, the importance density is the prior density p(X_t | X_{t-1}). If resampling is done at every step then the recursive form disappears. Wi_sis(k) does not depend on Wi_sis(k-1) as Wi_sis(k-1) = 1/N.
        end
               
     end

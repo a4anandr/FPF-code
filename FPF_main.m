@@ -15,7 +15,7 @@ tic
 syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-rng(1000);        % Set a common seed
+% rng(1000);        % Set a common seed
 
 %% Flags to be set to choose which methods to compare
 
@@ -23,8 +23,9 @@ exact = 0;           % Computes the exact gain and plots
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
+const = 1;           % Computes the constant gain approximation
 kalman = 1;          % Runs Kalman Filter for comparison
-sis    = 1; 
+sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -53,7 +54,7 @@ end
 
 % Setting a max and min threshold for gain
 K_max = 100;
-K_min = 0.2;
+K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -82,19 +83,23 @@ c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
 sigmaW = 0.3;
 
-% Parameters of p(0) - 2 component Gaussian mixture density 
+%% Parameters of the prior p(0) - 2 component Gaussian mixture density 
 m = 2;
 sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
+% Constructing a 3 component Gaussian mixture for EM to make sure gain does not blow up.
+mu_em = [0 mu];
+sigma_em = [0 sigma];
+w_em = [0 w];
 
 %% Additional variables 
 sdt = sqrt(dt);
 Q    = sigmaB^2;     % State process noise variance
 R    = sigmaW^2;     % Observation process noise variance 
 
-%% Initializing N particles for FPF from p(0)
+%% Initializing N particles from the prior
 gmobj = gmdistribution(mu',reshape(sigma.^2,1,1,m),w);
 Xi_0  = random(gmobj,N);
 Xi_0  = Xi_0';            % To be consistent with code below
@@ -105,13 +110,15 @@ Xi_exact(1,:)= Xi_0;      % Initializing the particles for all 4 approaches with
 Xi_fin(1,:)  = Xi_0;      
 Xi_coif(1,:) = Xi_0;
 Xi_rkhs(1,:) = Xi_0;
+Xi_const(1,:)= Xi_0;
+
 
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
 Wi_sis(1,:)  = (1/N) * ones(1,N);
 Zi_sis(1,:)  = c_x(Xi_sis(1,:)) * dt;
 
-%% Kalman filter - Initialization
+% Kalman filter - Initialization
 if kalman == 1
     mu_0    = 0;
     P_0     = 0; 
@@ -124,10 +131,6 @@ if kalman == 1
     K_kal(1)     = (P(1) * c_der_x(X_kal))/R; 
 end
 
-%% Making it a 3 component Gaussian mixture for EM to make sure gain does not blow up.
-mu_em = [0 mu];
-sigma_em = [0 sigma];
-w_em = [0 w];
 
 %% State and observation process evolution
 % Initialization
@@ -176,6 +179,12 @@ for k = 2: 1: (T/dt)
         c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
     end
     
+    if const == 1
+        mu_const(k-1)     = mean(Xi_const(k-1,:));
+        c_hat_const(k-1)  = mean(c_x(Xi_const(k-1,:))); 
+        K_const(k)        = mean((c_x(Xi_const(k-1,:)) - c_hat_const(k-1)) .* Xi_const(k-1,:));
+    end
+    
     if sis == 1
         mu_sis(k-1)       = Wi_sis(k-1,:)* Xi_sis(k-1,:)';
         N_eff_sis(k-1)    =  1 / sum(Wi_sis(k-1,:).^2);
@@ -208,7 +217,13 @@ for k = 2: 1: (T/dt)
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
        
-       % v) Sequential Importance Sampling Particle Filter (SIS PF)
+       % v) Constant gain approximation 
+       if const == 1
+           dI_const(k)       = dZ(k) - 0.5 * (c_x(Xi_const(k-1,i)) + c_hat_const(k-1)) * dt;          
+           Xi_const(k,i)     = Xi_const(k-1,i) + a_x(Xi_const(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_const(k) * dI_const(k);
+       end
+       
+       % vi) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
@@ -216,11 +231,12 @@ for k = 2: 1: (T/dt)
        end
               
     end
-    if sis == 1
-    % Normalizing the weights of the SIS - PF
-        Wi_sis(k,:)  = Wi_sis(k,:)/ sum(Wi_sis(k,:));
-        N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
-    end
+    
+ if sis == 1
+ % Normalizing the weights of the SIS - PF
+     Wi_sis(k,:)  = Wi_sis(k,:)/ sum(Wi_sis(k,:));
+     N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
+ end
     
  % v) Basic Kalman Filter for comparison
  if kalman == 1
@@ -248,6 +264,10 @@ for k = 2: 1: (T/dt)
         end
         if rkhs == 1
             plot(Xi_rkhs(k-1,:), K_rkhs(k,:), 'k^','DisplayName','RKHS');
+            hold on;
+        end
+        if const ==1
+            plot(Xi_const(k-1,:),K_const(k) * ones(1,N),'mv','DisplayName','Const');
             hold on;
         end
         title(['Gain at particle locations for ' num2str(N) ' particles at t = ' num2str((k-2) * dt)]);
@@ -282,6 +302,9 @@ for k = 2: 1: (T/dt)
             if rkhs == 1
                hist(Xi_rkhs(k-1,:),N);
             end             
+            if const == 1
+               hist(Xi_const(k-1,:),N);
+            end             
        else
             if fin == 1
              % CAUTION : histogram command works only in recent Matlab
@@ -293,6 +316,9 @@ for k = 2: 1: (T/dt)
             end
             if rkhs == 1
                histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS at t =' num2str( (k-1)*dt )]);
+            end
+            if const == 1
+               histogram(Xi_const(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using const at t =' num2str( (k-1)*dt )]);
             end
        end  
        if sis == 1
@@ -322,6 +348,9 @@ end
 if rkhs == 1
     mu_rkhs(k)      = mean(Xi_rkhs(k,:));
 end
+if rkhs == 1
+    mu_const(k)      = mean(Xi_const(k,:));
+end
 if sis == 1
     mu_sis(k)       = Wi_sis(k,:) * Xi_sis(k,:)';
 end
@@ -335,7 +364,7 @@ if exact == 1
     hold on;
 end
 if fin == 1
-    plot(0:dt:(k-1)*dt, mu_fin(1:k),'g--','DisplayName','Finite');
+    plot(0:dt:(k-1)*dt, mu_fin(1:k),'y--','DisplayName','Finite');
     hold on;
 end
 if coif == 1
@@ -344,6 +373,10 @@ if coif == 1
 end
 if rkhs == 1
     plot(0:dt:(k-1)*dt, mu_rkhs(1:k),'k--','DisplayName','RKHS');
+    hold on;
+end
+if const == 1
+    plot(0:dt:(k-1)*dt, mu_const(1:k),'g--','DisplayName','Const');
     hold on;
 end
 if kalman == 1

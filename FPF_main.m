@@ -1,4 +1,4 @@
-%% Feedback particle filter for state estimation problems 
+%% Feedback particle filter implementation for state estimation problems 
 % - Defines the state and observation processes - X_t and Z_t
 % - Defines the prior distribution p(0) 
 % - Generates particles Xi from the prior p(0)
@@ -6,7 +6,10 @@
 % functions - i) diff TD learning (old), ii) finite dim, iii) Coifman
 % kernel, iv) RKHS v) Kalman filter
 % based.
+% Code also implements a sequential importance sampling (SIS) particle
+% filter without resampling for comparison. 
 
+% Application - State - measurement model described in Arulampalam et al. 
 clear;
 clc;
 close all;
@@ -21,9 +24,9 @@ diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots 
 
 exact = 0;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 0;           % Computes gain using Coifman kernel method
+coif  = 1;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
-kalman = 1;          % Runs Kalman Filter for comparison
+kalman = 0;          % Runs Kalman Filter for comparison
 sis    = 1; 
 
 %% FPF parameters
@@ -39,14 +42,14 @@ end
 
 % ii) Coifman kernel 
 if coif == 1
-   eps_coif = 0.1;   % Time step parameter
+   eps_coif = 1;   % Time step parameter
 end
 
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.1;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
-   eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda   = 5e-1;           % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_rkhs = 5;           % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain = 0;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
@@ -57,12 +60,12 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 0.8;         % Total running time - Using same values as in Amir's CDC paper - 0.8
-dt  = 0.01;        % Time increments for the SDE
+T   = 100;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+dt  = 1;        % Time increments for the SDE
 
 % State process parameters
 % a = - 2 * x;           % 0 for a steady state process
-a = 0; 
+a = (x/2) + (25 * x /( 1 + x^2)) - x; 
 if a == 0
     a_x     = @(x) 0;
     a_der_x = @(x) 0;
@@ -70,19 +73,19 @@ else
     a_x = @(x) eval(a);
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
 end
-sigmaB = 0;             % 0 if no noise in state process
+sigmaB = 10;             % 0 if no noise in state process
 
 % Observation process parameters
-c =  5 * x;
-c_x = matlabFunction(c);
-c_for_der_x = @(x) eval(c);
-c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
-sigmaW = 0.3;
+h =  x^2 / 20;
+h_x = matlabFunction(h);
+h_for_der_x = @(x) eval(h);
+h_der_x = eval (['@(x)' char(diff(h_for_der_x(x)))]);
+sigmaW = 1;
 
 % Parameters of p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.1 0.1]; 
-mu    = [-1 1]; 
+sigma = [10 10]; 
+mu    = [-3 3]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
 
@@ -106,7 +109,7 @@ Xi_rkhs(1,:) = Xi_0;
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
 Wi_sis(1,:)  = (1/N) * ones(1,N);
-Zi_sis(1,:)  = c_x(Xi_sis(1,:)) * dt;
+Yi_sis(1,:)  = h_x(Xi_sis(1,:));
 
 %% Kalman filter - Initialization
 if kalman == 1
@@ -118,7 +121,7 @@ if kalman == 1
     end
     X_kal        = mu_0;         % Initializing the Kalman filter state estimate to the mean at t = 0.
     P(1)         = P_0 - mu_0^2; % Initializing the state covariance for the Kalman filter 
-    K_kal(1)     = (P(1) * c_der_x(X_kal))/R; 
+    K_kal(1)     = (P(1) * h_der_x(X_kal))/R; 
 end
 
 %% Making it a 3 component Gaussian mixture for EM to make sure gain does not blow up.
@@ -129,31 +132,25 @@ w_em = [0 w];
 %% State and observation process evolution
 % Initialization
 X(1)   = mu(2);
-Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
+Y(1)   = h_x(X(1)) + sigmaW * randn;
 
 for k = 2: 1: (T/dt)
     k
     
-    X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
-    Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
-    
-    if k == 2 
-        dZ(k) = Z(k) - Z(k-1); 
-    else
-        dZ(k) = 0.5 * (Z(k) - Z(k-2));
-    end
-    
+    X(k) = X(k-1) +   a_x(X(k-1)) + 8 * cos(1.2 * k) + sigmaB * randn;
+    Y(k) = h_x(X(k)) + sigmaW * randn; 
+        
     if exact == 1
         [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
-        [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
+        [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), h_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
     end
     
     if fin == 1
-        [K_fin(k,:)  ] = gain_fin(Xi_fin(k-1,:), c_x, d , basis, mu, sigma, p, diag_fn);
+        [K_fin(k,:)  ] = gain_fin(Xi_fin(k-1,:), h_x, d , basis, mu, sigma, p, diag_fn);
     end
     
     if coif == 1
-        [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
+        [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , h_x, eps_coif, diag_fn);
     end 
     
     if rkhs == 1
@@ -162,61 +159,64 @@ for k = 2: 1: (T/dt)
         else
             alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
-        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
+        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , h_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
     end
         
     for i = 1:N
        % i) Using exact solution of gain
        if exact == 1
            mu_exact(k-1)    = mean(Xi_exact(k-1,:));
-           c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
-           dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
-           Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
+           h_hat_exact(k-1) = mean(h_x(Xi_exact(k-1,:)));
+           dI_exact(k)      = Y(k) - 0.5 * (h_x(Xi_exact(k-1,i)) + h_hat_exact(k-1));
+           K_exact(k,i)      = min(max(K_exact(k,i),K_min),K_max);
+           Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) + 8 * cos(1.2 * k) + sigmaB * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
        end
        
        % ii) Finite dimensional basis 
        if fin == 1
            mu_fin(k-1)      = mean(Xi_fin(k-1,:));
-           c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
-           dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
-           Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
+           h_hat_fin(k-1)   = mean(h_x(Xi_fin(k-1,:)));
+           dI_fin(k)        = Y(k) - 0.5 * (h_x(Xi_fin(k-1,i)) + h_hat_fin(k-1));
+           Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) + 8 * cos(1.2 * k) + sigmaB * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
        end
        
        % iii) Coifman kernel
        if coif == 1
            mu_coif(k-1)     = mean(Xi_coif(k-1,:));
-           c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
-           dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
+           h_hat_coif(k-1)  = mean(h_x(Xi_coif(k-1,:)));
+           dI_coif(k)       = Y(k) - 0.5 * (h_x(Xi_coif(k-1,i)) + h_hat_coif(k-1));
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
-           Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_coif(k,i) * dI_coif(k);
+           Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) + 8 * cos(1.2 * k) + sigmaB * randn + (1 / R) * K_coif(k,i) * dI_coif(k);
        end
        
        % iv) RKHS
        if rkhs == 1
            mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
-           c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
-           dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
+           h_hat_rkhs(k-1)  = mean(h_x(Xi_rkhs(k-1,:)));
+           dI_rkhs(k)       = Y(k) - 0.5 * (h_x(Xi_rkhs(k-1,i)) + h_hat_rkhs(k-1));
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
-           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
+           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) + 8 * cos(1.2 * k) + sigmaB * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
        
        % v) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
-          mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';     
-          Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
-          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
-          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Based on eqn (63) of Arulampalam et al. Because the importance density is chosen to be the prior p(X_t | X_{t-1}) 
+          mu_sis(k-1)       = Wi_sis(k-1,:) * Xi_sis(k-1,:)';     
+          Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) + 8 * cos(1.2 * k) + sigmaB * randn; 
+          Yi_sis(k,i)       = h_x(Xi_sis(k,i)); 
+          Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R )) * exp ( - (Y(k) - Yi_sis(k,i))^2/ (2 * R ));   %  Based on eqn (63) of Arulampalam et al. Because the importance density is chosen to be the prior p(X_t | X_{t-1}) 
        end
               
     end
     % Normalizing the weights of the SIS - PF
     Wi_sis(k,:) = Wi_sis(k,:)/ sum(Wi_sis(k,:));
-    
+    if isnan(Wi_sis(k,:))
+        break;
+    end
  % v) Basic Kalman Filter for comparison
  if kalman == 1
-      X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1)) * dt + K_kal(k-1) * (dZ(k-1) - c_x(X_kal(k-1)) * dt);  % Kalman Filtered state estimate   
-      P(k)    = P(k-1)+ 2 * a_der_x(X_kal(k-1)) * P(k-1) * dt+ Q * dt - (K_kal(k-1)^2) * R * dt;     % Evolution of covariance
-      K_kal(k)= (P(k)* c_der_x(X_kal(k-1)))/R;                                                % Computation of Kalman Gain     
+      X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1))  + K_kal(k-1) * (Y(k-1) - h_x(X_kal(k-1)) );  % Kalman Filtered state estimate   
+      P(k)    = P(k-1)+ 2 * a_der_x(X_kal(k-1)) * P(k-1) + Q - (K_kal(k-1)^2) * R ;     % Evolution of covariance
+      K_kal(k)= (P(k)* h_der_x(X_kal(k-1)))/R;                                                % Computation of Kalman Gain     
  end
 
 %% Displaying figures for diagnostics 
@@ -349,7 +349,7 @@ title(['a =' char(a) ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigm
 
 
 figure;
-plot(0:dt:(k-1)*dt, Z(1:k),'r');
+plot(0:dt:(k-1)*dt, Y(1:k),'r');
 title('Z_t');
 
 if kalman == 1

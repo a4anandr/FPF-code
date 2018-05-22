@@ -14,6 +14,7 @@ tic
 
 syms x;
 diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
+diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(5001);        % Set a common seed
 No_runs = 10;   % Total number of runs to compute the rmse metric for each of the filters for comparison
@@ -370,6 +371,7 @@ if kalman == 1
 end
 
 %% Plots
+if diag_output == 1
 figure;
 plot(0:dt:(k-1)*dt, X(1:k),'k','DisplayName','Actual state');
 hold on;
@@ -405,11 +407,11 @@ legend('show');
 title(['a =' a_legend ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW) ', c = ' char(c) ]);
 
 
-figure;
-plot(0:dt:(k-1)*dt, Z(1:k),'r');
-title('Z_t');
-
 if diag_main == 1
+    figure;
+    plot(0:dt:(k-1)*dt, Z(1:k),'r');
+    title('Z_t');
+
     if kalman == 1
         figure;
         plot(0:dt:(k-1)*dt, K_kal(1:k),'r');

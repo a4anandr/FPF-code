@@ -13,9 +13,10 @@ close all;
 tic
 
 syms x;
-diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
+diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(1000);        % Set a common seed
+% rng(5001);        % Set a common seed
+No_runs = 10;   % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
@@ -29,7 +30,7 @@ sis    = 1;          % Runs Sequential Importance Sampling Particle Filter
 
 %% FPF parameters
 
-   N = 500;          % No of particles
+   N = 500;          % No of particles - Common for all Monte Carlo methods used
    
 % i) Finite dimensional basis
 if fin == 1
@@ -73,11 +74,11 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+sigmaB = 0.3;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
-c =  x;
+c = x;
 c_x = matlabFunction(c);
 c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
@@ -99,6 +100,8 @@ sdt = sqrt(dt);
 Q    = sigmaB^2;     % State process noise variance
 R    = sigmaW^2;     % Observation process noise variance 
 
+for run = 1: 1 : No_runs
+    run
 %% Initializing N particles from the prior
 gmobj = gmdistribution(mu',reshape(sigma.^2,1,1,m),w);
 Xi_0  = random(gmobj,N);
@@ -115,7 +118,7 @@ Xi_const(1,:)= Xi_0;
 
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
-Wi_sis(1,:)  = (1/N) * ones(1,N);
+Wi_sis(1,:)  = (1/N) * ones(1,N);          % Initializing all weights to equal value.
 Zi_sis(1,:)  = c_x(Xi_sis(1,:)) * dt;
 
 % Kalman filter - Initialization
@@ -138,7 +141,7 @@ X(1)   = mu(2);
 Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
-    k
+    % k
     
     X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
     Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
@@ -238,7 +241,7 @@ for k = 2: 1: (T/dt)
      N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
  end
     
- % v) Basic Kalman Filter for comparison
+ % vii) Extended Kalman Filter for comparison
  if kalman == 1
       X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1)) * dt + K_kal(k-1) * (dZ(k-1) - c_x(X_kal(k-1)) * dt);  % Kalman Filtered state estimate   
       P(k)    = P(k-1)+ 2 * a_der_x(X_kal(k-1)) * P(k-1) * dt+ Q * dt - (K_kal(k-1)^2) * R * dt;     % Evolution of covariance
@@ -336,23 +339,34 @@ for k = 2: 1: (T/dt)
     end
 end
 
+%% Computing the rmse metric
+
 if exact ==1
     mu_exact(k)     = mean(Xi_exact(k,:));
+    rmse_exact(run) = (1 / (T/dt)) * sum ( (X - mu_exact).^2);
 end
 if fin == 1
     mu_fin(k)       = mean(Xi_fin(k,:));
+    rmse_fin(run)   = (1 / (T/dt)) * sum ( (X - mu_fin).^2);
 end
 if coif == 1
     mu_coif(k)      = mean(Xi_coif(k,:));
+    rmse_coif(run)  = (1 / (T/dt)) * sum ( (X - mu_coif).^2);
 end
 if rkhs == 1
     mu_rkhs(k)      = mean(Xi_rkhs(k,:));
+    rmse_rkhs(run)  = (1 / (T/dt)) * sum ( (X - mu_rkhs).^2);
 end
-if rkhs == 1
-    mu_const(k)      = mean(Xi_const(k,:));
+if const == 1
+    mu_const(k)     = mean(Xi_const(k,:));
+    rmse_const(run) = (1 / (T/dt)) * sum ( (X - mu_const).^2);
 end
 if sis == 1
     mu_sis(k)       = Wi_sis(k,:) * Xi_sis(k,:)';
+    rmse_sis(run)   = (1 / (T/dt)) * sum ( (X - mu_sis).^2);
+end
+if kalman == 1
+    rmse_kal(run)   = (1 / (T/dt)) * sum ( (X - X_kal).^2);
 end
 
 %% Plots
@@ -414,6 +428,38 @@ if diag_main == 1
         title('Effective particle size N_{eff} in SIS PF');
     end
     
+  end
+end
+
+% Overall rmse 
+
+if exact == 1
+    rmse_tot_exact = (1 / No_runs) * rmse_exact;
+    sprintf('RMSE for exact gain computation - %0.5g', rmse_tot_exact)
+end
+if fin == 1
+    rmse_tot_fin = (1 / No_runs) * rmse_fin;
+    sprintf('RMSE for finite basis - %0.5g', rmse_tot_fin)
+end
+if coif == 1
+    rmse_tot_coif = (1 / No_runs) * rmse_coif;
+    sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
+end
+if rkhs == 1
+    rmse_tot_rkhs = (1 / No_runs) * rmse_rkhs;
+    sprintf('RMSE for RKHS method - %0.5g', rmse_tot_rkhs)
+end
+if const == 1
+    rmse_tot_const = (1 / No_runs) * rmse_const;
+    sprintf('RMSE for const gain approximation - %0.5g', rmse_tot_const)
+end
+if sis == 1
+    rmse_tot_sis = (1 / No_runs) * rmse_sis;
+    sprintf('RMSE for SIS PF - %0.5g', rmse_tot_sis)
+end
+if kalman == 1
+    rmse_tot_kal   = (1 / No_runs) * rmse_kal;
+    sprintf('RMSE for Kalman Filter - %0.5g', rmse_tot_kal)
 end
 
 toc

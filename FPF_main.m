@@ -64,8 +64,8 @@ T   = 0.8;         % Total running time - Using same values as in Amir's CDC pap
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = - 2 * x;           % 0 for a steady state process
-% a = 0; 
+% a = - 2 * x;           % 0 for a steady state process
+a = 0; 
 if a == 0
     a_x      = @(x) 0;
     a_der_x  = @(x) 0;
@@ -75,7 +75,7 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0.3;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
@@ -372,40 +372,40 @@ end
 
 %% Plots
 if diag_output == 1
-figure;
-plot(0:dt:(k-1)*dt, X(1:k),'k','DisplayName','Actual state');
-hold on;
-if exact == 1
-    plot(0:dt:(k-1)*dt, mu_exact(1:k),'r--','DisplayName','Exact');
+    figure;
+    plot(0:dt:(k-1)*dt, X(1:k),'k','DisplayName','Actual state');
     hold on;
+    if exact == 1
+        plot(0:dt:(k-1)*dt, mu_exact(1:k),'r--','DisplayName','Exact');
+        hold on;
+    end
+    if fin == 1
+        plot(0:dt:(k-1)*dt, mu_fin(1:k),'y--','DisplayName','Finite');
+        hold on;
+    end
+    if coif == 1
+        plot(0:dt:(k-1)*dt, mu_coif(1:k),'b--','DisplayName','Coifman');
+        hold on;
+    end
+    if rkhs == 1
+        plot(0:dt:(k-1)*dt, mu_rkhs(1:k),'k--','DisplayName','RKHS');
+        hold on;
+    end
+    if const == 1
+        plot(0:dt:(k-1)*dt, mu_const(1:k),'g--','DisplayName','Const');
+        hold on;
+    end
+    if kalman == 1
+        plot(0:dt:(k-1)*dt, X_kal(1:k),'c--','DisplayName','Kalman');
+        hold on;
+    end
+    if sis == 1
+        plot(0:dt:(k-1)*dt, mu_sis(1:k),'m--','DisplayName','SIS');
+        hold on;
+    end
+    legend('show');
+    title(['a =' a_legend ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW) ', c = ' char(c) ]);
 end
-if fin == 1
-    plot(0:dt:(k-1)*dt, mu_fin(1:k),'y--','DisplayName','Finite');
-    hold on;
-end
-if coif == 1
-    plot(0:dt:(k-1)*dt, mu_coif(1:k),'b--','DisplayName','Coifman');
-    hold on;
-end
-if rkhs == 1
-    plot(0:dt:(k-1)*dt, mu_rkhs(1:k),'k--','DisplayName','RKHS');
-    hold on;
-end
-if const == 1
-    plot(0:dt:(k-1)*dt, mu_const(1:k),'g--','DisplayName','Const');
-    hold on;
-end
-if kalman == 1
-    plot(0:dt:(k-1)*dt, X_kal(1:k),'c--','DisplayName','Kalman');
-    hold on;
-end
-if sis == 1
-    plot(0:dt:(k-1)*dt, mu_sis(1:k),'m--','DisplayName','SIS');
-    hold on;
-end
-legend('show');
-title(['a =' a_legend ', \sigma_B = ' num2str(sigmaB) ', \sigma_W =' num2str(sigmaW) ', c = ' char(c) ]);
-
 
 if diag_main == 1
     figure;
@@ -436,31 +436,31 @@ end
 % Overall rmse 
 
 if exact == 1
-    rmse_tot_exact = (1 / No_runs) * rmse_exact;
+    rmse_tot_exact = (1 / No_runs) * sum( rmse_exact);
     sprintf('RMSE for exact gain computation - %0.5g', rmse_tot_exact)
 end
 if fin == 1
-    rmse_tot_fin = (1 / No_runs) * rmse_fin;
+    rmse_tot_fin = (1 / No_runs) * sum ( rmse_fin );
     sprintf('RMSE for finite basis - %0.5g', rmse_tot_fin)
 end
 if coif == 1
-    rmse_tot_coif = (1 / No_runs) * rmse_coif;
+    rmse_tot_coif = (1 / No_runs) * sum ( rmse_coif);
     sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
 end
 if rkhs == 1
-    rmse_tot_rkhs = (1 / No_runs) * rmse_rkhs;
+    rmse_tot_rkhs = (1 / No_runs) * sum( rmse_rkhs );
     sprintf('RMSE for RKHS method - %0.5g', rmse_tot_rkhs)
 end
 if const == 1
-    rmse_tot_const = (1 / No_runs) * rmse_const;
+    rmse_tot_const = (1 / No_runs) * sum( rmse_const);
     sprintf('RMSE for const gain approximation - %0.5g', rmse_tot_const)
 end
 if sis == 1
-    rmse_tot_sis = (1 / No_runs) * rmse_sis;
+    rmse_tot_sis = (1 / No_runs) * sum ( rmse_sis);
     sprintf('RMSE for SIS PF - %0.5g', rmse_tot_sis)
 end
 if kalman == 1
-    rmse_tot_kal   = (1 / No_runs) * rmse_kal;
+    rmse_tot_kal   = (1 / No_runs) * sum( rmse_kal);
     sprintf('RMSE for Kalman Filter - %0.5g', rmse_tot_kal)
 end
 

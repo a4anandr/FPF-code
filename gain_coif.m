@@ -21,7 +21,7 @@ for pi = 1:1:N
     end
     T(pi,:)  = k(pi,:)./sum(k(pi,:));                                       % Markov semigroup approximation
 end
-while (max_diff > 1e-4 && iterations < No_iterations)                        % Can adjust this exit criteria - (norm_diff > 1e-2 & iterations < 50000) 
+while (max_diff > 1e-3 && iterations < No_iterations)                        % Can adjust this exit criteria - (norm_diff > 1e-2 & iterations < 50000) 
     Phi(:,iterations + 1) = T * Phi(:,iterations) + epsilon * H';
     max_diff = max(Phi(:,iterations + 1) - Phi(:,iterations)) - min(Phi(:,iterations + 1) - Phi(:,iterations));
     iterations = iterations + 1;

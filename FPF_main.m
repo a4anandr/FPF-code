@@ -13,11 +13,11 @@ close all;
 tic
 
 syms x;
-diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
+diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(5001);        % Set a common seed
-No_runs = 10;   % Total number of runs to compute the rmse metric for each of the filters for comparison
+rng(5000);        % Set a common seed
+No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
@@ -25,7 +25,7 @@ exact = 0;           % Computes the exact gain and plots
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
-const = 1;           % Computes the constant gain approximation
+const = 0;           % Computes the constant gain approximation
 kalman = 1;          % Runs Kalman Filter for comparison
 sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
 
@@ -56,16 +56,16 @@ end
 
 % Setting a max and min threshold for gain
 K_max = 100;
-K_min = -100;
+K_min = 0.2;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 0.8;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-% a = - 2 * x;           % 0 for a steady state process
-a = 0; 
+a = - 2 * x;           % 0 for a steady state process
+% a = 0; 
 if a == 0
     a_x      = @(x) 0;
     a_der_x  = @(x) 0;
@@ -75,7 +75,7 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+sigmaB = 0.3;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
@@ -196,40 +196,41 @@ for k = 2: 1: (T/dt)
         
     for i = 1:N
        % i) Using exact solution of gain
+       common_rand = randn;
        if exact == 1
            dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
-           Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
+           Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * common_rand + (1/ R) * K_exact(k,i) * dI_exact(k);
        end
        
        % ii) Finite dimensional basis 
        if fin == 1
            dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
-           Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
+           Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * common_rand + (1/ R) * K_fin(k,i) * dI_fin(k);
        end
        
        % iii) Coifman kernel
        if coif == 1
            dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
-           Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_coif(k,i) * dI_coif(k);
+           Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_coif(k,i) * dI_coif(k);
        end
        
        % iv) RKHS
        if rkhs == 1
            dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
-           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
+           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
        
        % v) Constant gain approximation 
        if const == 1
            dI_const(k)       = dZ(k) - 0.5 * (c_x(Xi_const(k-1,i)) + c_hat_const(k-1)) * dt;          
-           Xi_const(k,i)     = Xi_const(k-1,i) + a_x(Xi_const(k-1,i)) * dt + sigmaB * sdt * randn + (1 / R) * K_const(k) * dI_const(k);
+           Xi_const(k,i)     = Xi_const(k-1,i) + a_x(Xi_const(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_const(k) * dI_const(k);
        end
        
        % vi) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
-          Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
+          Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * common_rand; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
           Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Based on eqn(63) of Arulampalam et al. In our example, the importance density is the prior density p(X_t | X_{t-1}). If resampling is done at every step then the recursive form disappears. Wi_sis(k) does not depend on Wi_sis(k-1) as Wi_sis(k-1) = 1/N.
        end
@@ -278,7 +279,7 @@ for k = 2: 1: (T/dt)
         legend('show');
     end
     
-    if ( k == 2 || k == (T/dt))
+    if ( k == 2 || k == 0.5*(T/dt) || k == (T/dt))
         step = 0.05;
         range = min(mu_em)- 3 * max(sigma_em): step : max(mu_em) + 3 * max(sigma_em);
         figure(100);
@@ -314,15 +315,19 @@ for k = 2: 1: (T/dt)
              % CAUTION : histogram command works only in recent Matlab
              % versions, if it does not work, comment this section out
                histogram(Xi_fin(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using finite at t =' num2str( (k-1)*dt )]);
+               hold on;
             end
             if coif == 1
                histogram(Xi_coif(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using Coifman at t =' num2str( (k-1)*dt )]);
+               hold on;
             end
             if rkhs == 1
                histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS at t =' num2str( (k-1)*dt )]);
+               hold on;
             end
             if const == 1
                histogram(Xi_const(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using const at t =' num2str( (k-1)*dt )]);
+               hold on;
             end
        end  
        if sis == 1
@@ -334,6 +339,7 @@ for k = 2: 1: (T/dt)
                p_sis_t = p_sis_t + Wi_sis(k-1,i) *  exp(- (range - Xi_sis(k-1,i)).^2 / ( 2 * sigma_sis^2)) * (1 / sqrt(2 * pi * sigma_sis^2));
            end
            plot(range, p_sis_t,'DisplayName',['Using SIS PF p_t at t = ' num2str( (k-1)*dt )]);
+           hold on;
        end
        legend('show');
        title('Posterior density p_t - Smoothed and Histogram');

@@ -16,12 +16,12 @@ syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-rng(5000);        % Set a common seed
+% rng(3300);        % Set a common seed
 No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
-exact = 0;           % Computes the exact gain and plots 
+exact = 1;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
@@ -50,13 +50,13 @@ if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
    lambda   = 0.1;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
-   lambda_gain = 0;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   lambda_gain = 0; %1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
 % Setting a max and min threshold for gain
 K_max = 100;
-K_min = 0.2;
+K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -64,8 +64,8 @@ T   = 1;         % Total running time - Using same values as in Amir's CDC paper
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = - 2 * x;           % 0 for a steady state process
-% a = 0; 
+% a = - 2 * x;           % 0 for a steady state process
+a = 0; 
 if a == 0
     a_x      = @(x) 0;
     a_der_x  = @(x) 0;
@@ -75,7 +75,7 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0.3;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters

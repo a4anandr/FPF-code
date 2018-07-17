@@ -18,47 +18,20 @@ clear;
 clc;
 close all;
 tic
+warning off;
 
-x =sym('x',[1 2]);
-diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
+diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(3300);        % Set a common seed
-No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
+% rng(1000);       % Set a common seed
+No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
-rkhs  = 0;           % Computes gain using RKHS
+rkhs  = 1;           % Computes gain using RKHS
 const = 1;           % Computes the constant gain approximation
-kalman = 1;          % Runs Kalman Filter for comparison
-sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
-
-%% Filter parameters
-
-N = 500;          % No of particles - Common for all Monte Carlo methods used
- 
-% i) Coifman kernel 
-if coif == 1
-   eps_coif = 0.1;   % Time step parameter
-end
-
-% ii) RKHS
-if rkhs == 1
-   kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.1;         % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
-   eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
-   lambda_gain = 0;        %1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
-   K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
-end
-
-% iii) SIS PF
-if sis == 1 
-    resampling = 0;        % Whether you need deterministic resampling 
-end
-
-% Setting a max and min threshold for gain
-K_max = 100;
-K_min = -100;
+kalman = 0;          % Runs Kalman Filter for comparison
+sis    = 0;          % Runs Sequential Importance Sampling Particle Filter 
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -70,8 +43,10 @@ sdt   = sqrt(delta);
 zeta  = 2;
 Theta = 50;
 rho   = 9;
+d     = 2;        % State space dimension
 
 % State process initialization
+x =sym('x',[1 2]);
 mag_x = @(x)sqrt(x(1)^2 + x(2)^2);
 f1_x = @(x)zeta * ( x(1) / mag_x(x)^2) - Theta * (x(1) / mag_x(x)) * ( mag_x(x) > rho) ;
 f2_x = @(x)zeta * ( x(2) / mag_x(x)^2) - Theta * (x(1) / mag_x(x)) * ( mag_x(x) > rho) ;
@@ -82,7 +57,40 @@ e2 = 0.4;
 
 % Observation process parameters
 h_x = @(x)atan(x(2)/x(1));
-theta = 0.32;                % Standard deviation parameter in observation process
+theta = 0.32;              % Standard deviation parameter in observation process
+R     = 1;                 % theta^2, Observation noise covariance
+
+%% Parameters of the prior p(0) - Multivariate Gaussian density 
+X_0  = [ 0.5 -0.5];
+% Sig = 10 * eye(2);                 % 10 * eye(2) in the paper
+Sig = [1 0; 0 1];
+
+%% Filter parameters
+
+N = 500;          % No of particles - Common for all Monte Carlo methods used
+
+% Setting a max and min threshold for gain
+K_max = 100;
+K_min = -100;
+ 
+%% i) Coifman kernel 
+if coif == 1
+   eps_coif = 0.1;   % Time step parameter
+end
+
+%% ii) RKHS
+if rkhs == 1
+   kernel   = 0;           % 0 for Gaussian kernel
+   lambda   = 0.01;        % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
+   eps_rkhs = 2;           % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   lambda_gain = 0;        % 1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_rkhs   = ones(1,N,d); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+end
+
+%% iii) SIS PF
+if sis == 1 
+    resampling = 1;        % Whether you need deterministic resampling 
+end
 
 %% iv) Extended Kalman Filter
 % Declaring symbolic functions and derivatives to be used in EKF
@@ -118,19 +126,19 @@ if kalman == 1
    
 end
 
-%% Parameters of the prior p(0) - Multivariate Gaussian density 
-X_0  = [ 0.5 -0.5];
-Sig = 10 * eye(2);                 % 10 * eye(2) in the paper
-
-%% Additional variables 
-sdt = sqrt(delta);                 % To be used as the noise standard deviation term in SDE
-
 for run = 1: 1 : No_runs
     run
+    ind_count = 0;             % To count the number of times the trajectory goes out of the circle 
     
-% Initializing N particles from the prior
+%% State and observation process initialization
+    X(1,:)   = X_0;
+    Z(1)     = h_x(X(1,:)) + theta * randn;
+    Z_true(1)= h_x(X(1,:));
+
+%% Initializing N particles from the prior
     Xi_0  = mvnrnd(X_0,Sig,N);
-    Xi_0  = sort(Xi_0);       % Sort the samples in ascending order for better visualization.
+    plot(Xi_0(:,1),Xi_0(:,2),'b*');    
+    % Xi_0  = sort(Xi_0);       % Not to be done in 2 dimension - Sort the samples in ascending order for better visualization.
     mui_0 = mean(Xi_0);
     
     if coif == 1
@@ -154,7 +162,7 @@ for run = 1: 1 : No_runs
        end
     end
 
-% Kalman filter - Initialization
+%  Kalman filter - Initialization
     if kalman == 1
        X_kal        = mean(Xi_0);     % Initializing the Kalman filter state estimate to the mean at t = 0, More accurate initialization is X_0.
        P(:,:,1)     = Sig;            % Initializing the state covariance for the Kalman filter 
@@ -162,55 +170,43 @@ for run = 1: 1 : No_runs
        K_kal(:,1)   = P(:,:,1) * H'; 
     end
 
-%% State and observation process initialization
-
-X(1,:)   = X_0;
-Z(1)     = h_x(X(1,:)) + theta * randn;
-Z_true(1)= h_x(X(1,:));
-
-for k = 2: 1: (T/delta)
-    
-    k   
+for k = 2: 1: (T/delta)    
+    k  
     %% Actual state - observation process evolution
     X(k,1)   = X(k-1,1) - X(k-1,2) * delta +   f1_x(X(k-1,:)) * delta + e1 * sdt * randn;        % ideally needs to be sdt
     X(k,2)   = X(k-1,2) + X(k-1,1) * delta +   f2_x(X(k-1,:)) * delta + e2 * sdt * randn;
+    if (mag_x(X(k,:)) > rho)
+       ind_count = ind_count + 1;
+    end
     Z(k)     = h_x(X(k,:))  + theta * randn; 
     Z_true(k)= h_x(X(k,:));
      
     %% Filters
     if coif == 1
-        [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
-        mu_coif(k-1)     = mean(Xi_coif(k-1,:));
-        c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
+        [h_hat_coif(k-1) K_coif(k,:,:) ] = gain_coif_multi(Xi_coif(:,:,k-1) , h_x, d, eps_coif, diag_fn);
+        mu_coif(k-1,:)   = mean(Xi_coif(:,:,k-1));
+        K_const_coif(k,:)= mean(K_coif(k,:,:),2);
     end 
     
     if rkhs == 1
         if k == 2
             alpha = 0;
         else
-            alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+            alpha = (lambda_gain / delta^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
-        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
-        mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
-        c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
+        [h_hat_rkhs(k-1) K_rkhs(k,:,:)] = gain_rkhs_multi(Xi_rkhs(:,:,k-1) , h_x, d , kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:,:) , diag_fn);
+        mu_rkhs(k-1,:)   = mean(Xi_rkhs(:,:,k-1));
+        K_const_rkhs(k,:)= mean(K_rkhs(k,:,:),2);
     end
     
-    if const == 1
+    if const == 1   
+        [h_hat_const(k-1) K_const(k,:)] = gain_const_multi(Xi_const(:,:,k-1), h_x, d, diag_fn);
         mu_const(k-1,:)   = mean(Xi_const(:,:,k-1));
-        h_hat_const(k-1)      = 0;
-        for i = 1:N
-            h_hat_const(k-1)  = h_hat_const(k-1) + (1/N) * h_x(Xi_const(i,:,k-1));
-        end
-        K_const(k,:)    = zeros(1,2);
-        for i = 1: N
-            K_const(k,:)= K_const(k,:) + (1/N) * ((h_x(Xi_const(i,:,k-1)) - h_hat_const(k-1)) .* Xi_const(i,:,k-1));
-            res(i) = h_x(Xi_const(i,:,k-1)) - h_hat_const(k-1);
-        end
     end
     
     if sis == 1
-        mu_sis(k-1,:)       = Wi_sis(:,k-1)' * Xi_sis(:,:,k-1);
-        N_eff_sis(k-1)    =  1 / sum(Wi_sis(:,k-1).^2);
+        mu_sis(k-1,:)     = Wi_sis(:,k-1)' * Xi_sis(:,:,k-1);
+        N_eff_sis(k-1)    = 1 / sum(Wi_sis(:,k-1).^2);
     end
         
     for i = 1:N
@@ -219,22 +215,26 @@ for k = 2: 1: (T/delta)
        % i) Coifman kernel
        if coif == 1
            dI_coif(k)       = Z(k-1) - 0.5 * (h_x(Xi_coif(i,:,k-1)) + h_hat_coif(k-1));
-           K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
-           Xi_coif(k,i)     = Xi_coif(k-1,i) + f_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_coif(k,i) * dI_coif(k);
+           K_coif(k,i,1)    = min(max(K_coif(k,i,1),K_min),K_max);
+           K_coif(k,i,2)    = min(max(K_coif(k,i,2),K_min),K_max);
+           Xi_coif(i,1,k)   = Xi_coif(i,1,k-1) - Xi_coif(i,2,k-1) * delta + f1_x(Xi_coif(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_coif(k,i,1)/R) * dI_coif(k);
+           Xi_coif(i,2,k)   = Xi_coif(i,2,k-1) - Xi_coif(i,1,k-1) * delta + f2_x(Xi_coif(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_coif(k,i,2)/R) * dI_coif(k);
        end
        
        % ii) RKHS
        if rkhs == 1
            dI_rkhs(k)       = Z(k-1) - 0.5 * (h_x(Xi_rkhs(i,:,k-1)) + h_hat_rkhs(k-1));
-           K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
-           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + f_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
+           K_rkhs(k,i,1)    = min(max(K_rkhs(k,i,1),K_min),K_max);
+           K_rkhs(k,i,2)    = min(max(K_rkhs(k,i,2),K_min),K_max);
+           Xi_rkhs(i,1,k)   = Xi_rkhs(i,1,k-1) - Xi_rkhs(i,2,k-1) * delta + f1_x(Xi_rkhs(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_rkhs(k,i,1)/R) * dI_rkhs(k);       % K_rkhs(k,i,1) * dI_rkhs(k)
+           Xi_rkhs(i,2,k)   = Xi_rkhs(i,2,k-1) + Xi_rkhs(i,1,k-1) * delta + f2_x(Xi_rkhs(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_rkhs(k,i,2)/R) * dI_rkhs(k);
        end
        
        % iii) Constant gain approximation 
        if const == 1
            dI_const(k)      = Z(k-1) - 0.5 * (h_x(Xi_const(i,:,k-1)) + h_hat_const(k-1));          
-           Xi_const(i,1,k)  = Xi_const(i,1,k-1) - Xi_const(i,2,k-1) * delta + f1_x(Xi_const(i,:,k-1)) * delta + e1 * sdt * common_rand(1) +  ( K_const(k,1)) * dI_const(k);    % (1/theta^2) is actually required?
-           Xi_const(i,2,k)  = Xi_const(i,2,k-1) + Xi_const(i,1,k-1) * delta + f2_x(Xi_const(i,:,k-1)) * delta + e2 * sdt * common_rand(2) +  ( K_const(k,2)) * dI_const(k);
+           Xi_const(i,1,k)  = Xi_const(i,1,k-1) - Xi_const(i,2,k-1) * delta + f1_x(Xi_const(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_const(k,1)/R) * dI_const(k);    % (1/theta^2) is actually required?
+           Xi_const(i,2,k)  = Xi_const(i,2,k-1) + Xi_const(i,1,k-1) * delta + f2_x(Xi_const(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_const(k,2)/R) * dI_const(k);
        end
        
        % iv) Sequential Importance Sampling Particle Filter (SIS PF)
@@ -288,8 +288,8 @@ for k = 2: 1: (T/delta)
      
  % vii) Extended Kalman Filter for comparison
  if kalman == 1
-      X_kal(k,1)        = X_kal(k-1,1) - X_kal(k-1,2) * delta + f1_x(X_kal(k-1,:)) * delta + K_kal(1,k-1) * (Z(k-1) - h_x(X_kal(k-1,:))) * delta;  % Kalman Filtered state estimate   
-      X_kal(k,2)        = X_kal(k-1,2) + X_kal(k-1,1) * delta + f2_x(X_kal(k-1,:)) * delta + K_kal(2,k-1) * (Z(k-1) - h_x(X_kal(k-1,:))) * delta; 
+      X_kal(k,1)        = X_kal(k-1,1) - X_kal(k-1,2) * delta + f1_x(X_kal(k-1,:)) * delta + ( K_kal(1,k-1)/R) * (Z(k-1) - h_x(X_kal(k-1,:)));  % Kalman Filtered state estimate   
+      X_kal(k,2)        = X_kal(k-1,2) + X_kal(k-1,1) * delta + f2_x(X_kal(k-1,:)) * delta + ( K_kal(2,k-1)/R) * (Z(k-1) - h_x(X_kal(k-1,:))); 
       if (mag_x(X_kal(k-1,:)) > rho)
           A = [ eval(subs(f1_large_y,{y,z},X_kal(k-1,:))) eval(subs(f1_large_z,{y,z},X_kal(k-1,:))); 
                 eval(subs(f2_large_y,{y,z},X_kal(k-1,:))) eval(subs(f2_large_z,{y,z},X_kal(k-1,:)))];
@@ -303,40 +303,34 @@ for k = 2: 1: (T/delta)
  end
 
 %% Displaying figures for diagnostics 
-
-    % Plotting gains at k = 2, 3, 10, 20, 30, 40
-    if ( diag_main == 1 && ( k == 2 || k == 3 || k == 11 || k == 21 || k == 31 || k == (T/dt))) 
-        figure;
-        if coif == 1
-            plot(Xi_coif(k-1,:), K_coif(k,:), 'bo','DisplayName','Coifman');
-            hold on;
-        end
-        if rkhs == 1
-            plot(Xi_rkhs(k-1,:), K_rkhs(k,:), 'k^','DisplayName','RKHS');
-            hold on;
-        end
-        if const ==1
-            plot(Xi_const(k-1,:),K_const(k) * ones(1,N),'mv','DisplayName','Const');
-            hold on;
-        end
-        title(['Gain at particle locations for ' num2str(N) ' particles at t = ' num2str((k-2) * delta)]);
-        legend('show');
+% Plotting histograms of particles at k = 2, 3, 10, 20, 30, 40
+    if ( diag_main == 1 && ( k == 2 || k == 3 || k == 11 || k == 21 || k == 31 || k == (T/delta))) 
+       clf
+       figure(100);
+       subplot(2,1,1);
+       if const == 1
+          hist3(Xi_const(:,:,k),[100 100]);
+       end
+       subplot(2,1,2);
+       if rkhs == 1
+          hist3(Xi_rkhs(:,:,k),[100 100]);
+       end
     end
 end    
 
 %% Computing the rmse metric
 
 if coif == 1
-    mu_coif(k)      = mean(Xi_coif(k,:));
-    rmse_coif(run)  = (1 / (T/delta)) * sum ( (X - mu_coif).^2);
+    mu_coif(k,:)      = mean(Xi_coif(k,:));
+    rmse_coif(run)  = (1 / (T/delta)) * sqrt(sum(sum((X - mu_coif).^2)));
 end
 if rkhs == 1
-    mu_rkhs(k)      = mean(Xi_rkhs(k,:));
-    rmse_rkhs(run)  = (1 / (T/delta)) * sum ( (X - mu_rkhs).^2);
+    mu_rkhs(k,:)    = mean(Xi_rkhs(:,:,k));
+    rmse_rkhs(run)  = (1 / (T/delta)) * sqrt(sum(sum((X - mu_rkhs).^2)));
 end
 if const == 1
     mu_const(k,:)   = mean(Xi_const(:,:,k));
-    rmse_const(run) = (1 / (T/delta)) * sqrt(sum (sum( (X - mu_const).^2)));
+    rmse_const(run) = (1 / (T/delta)) * sqrt(sum(sum((X - mu_const).^2)));
 end
 if sis == 1
     mu_sis(k,:)     = Wi_sis(:,k)' * Xi_sis(:,:,k);
@@ -347,49 +341,103 @@ if kalman == 1
 end
 
 %% Plotting the state trajectory and estimates
-if diag_output == 1    
+if (diag_output == 1 && No_runs == 1)   
     figure;
     plot(X(1:k,1),X(1:k,2),'linewidth',2.0,'DisplayName','True state');
     hold on;
+    th = 0:pi/50:2*pi;
+    xunit = rho * cos(th);
+    yunit = rho * sin(th);
+    plot(xunit, yunit,'r--','DisplayName','|x| < \rho');
     if coif == 1
-        plot(mu_coif(1:k,1), mu_coif(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - Coifman');
+        plot(mu_coif(1:k,1), mu_coif(1:k,2),'c-o','linewidth',2.0,'DisplayName','FPF - Coifman');
         hold on;
     end
     if rkhs == 1
-        plot(mu_rkhs(1:k,1), mu_rkhs(1:k,2),'k--','linewidth',2.0,'DisplayName','FPF - RKHS');
+        plot(mu_rkhs(1:k,1), mu_rkhs(1:k,2),'k-x','linewidth',2.0,'DisplayName','FPF - RKHS');
         hold on;
     end
     if const == 1
-        plot(mu_const(1:k,1), mu_const(1:k,2),'g--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(mu_const(1:k,1), mu_const(1:k,2),'b-s','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if kalman == 1
-        plot(X_kal(1:k,1), X_kal(1:k,2),'c--','linewidth',2.0,'DisplayName','EKF');
+        plot(X_kal(1:k,1), X_kal(1:k,2),'r-^','linewidth',2.0,'DisplayName','EKF');
         hold on;
     end
     if sis == 1
-        plot(mu_sis(1:k,1), mu_sis(1:k,2),'m--','linewidth',2.0,'DisplayName','SIS PF');
+        plot(mu_sis(1:k,1), mu_sis(1:k,2),'m-d','linewidth',2.0,'DisplayName','SIS PF');
         hold on;
     end
     legend('show');
    
+    figure;
+    plot(0:delta:(k-1)*delta, X(1:k,1),'DisplayName','True state');
+    hold on;
+    if coif == 1
+        plot(0:delta:(k-1)*delta, mu_coif(1:k,1),'c--','linewidth',2.0,'DisplayName','FPF - Coifman');
+        hold on;
+    end
+    if rkhs == 1
+        plot(0:delta:(k-1)*delta, mu_rkhs(1:k,1),'k--','linewidth',2.0,'DisplayName','FPF - RKHS');
+        hold on;
+    end
+    if const == 1
+        plot(0:delta:(k-1)*delta, mu_const(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        hold on;
+    end
+    if kalman == 1
+        plot(0:delta:(k-1)*delta, X_kal(1:k,1),'r--','linewidth',2.0,'DisplayName','EKF');
+        hold on;
+    end
+    if sis == 1
+        plot(0:delta:(k-1)*delta, mu_sis(1:k,1),'m--','linewidth',2.0,'DisplayName','SIS PF');
+        hold on;
+    end
+    legend('show');
     
+    figure;
+    plot(0:delta:(k-1)*delta, X(1:k,1),'DisplayName','True state');
+    hold on;
+    if coif == 1
+        plot(0:delta:(k-1)*delta, mu_coif(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - Coifman');
+        hold on;
+    end
+    if rkhs == 1
+        plot(0:delta:(k-1)*delta, mu_rkhs(1:k,2),'k--','linewidth',2.0,'DisplayName','FPF - RKHS');
+        hold on;
+    end
+    if const == 1
+        plot(0:delta:(k-1)*delta, mu_const(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        hold on;
+    end
+    if kalman == 1
+        plot(0:delta:(k-1)*delta, X_kal(1:k,2),'r--','linewidth',2.0,'DisplayName','EKF');
+        hold on;
+    end
+    if sis == 1
+        plot(0:delta:(k-1)*delta, mu_sis(1:k,2),'m--','linewidth',2.0,'DisplayName','SIS PF');
+        hold on;
+    end
+    legend('show');
     
     figure;
     plot(0:delta:(k-1)*delta, Z(1:k),'k','DisplayName','Observations');
     hold on;
     plot(0:delta:(k-1)*delta, Z_true(1:k),'r','DisplayName','True observations');   
     title('Z_t');
+    legend('show');
 end
 
-  if diag_main == 1
-    if sis == 1
+ if diag_main == 1
+   if sis == 1
         figure;
         plot(0:delta:(k-1)*delta, N_eff_sis(1:k),'r');
         hold on;
         title('Effective particle size N_{eff} in SIS PF');
-    end    
-  end
+   end    
+ end
+ 
 end
 
 
@@ -399,19 +447,19 @@ if coif == 1
     sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
 end
 if rkhs == 1
-    rmse_tot_rkhs = (1 / No_runs) * sum( rmse_rkhs );
+    rmse_tot_rkhs = mean( rmse_rkhs, 'omitnan' );
     sprintf('RMSE for RKHS method - %0.5g', rmse_tot_rkhs)
 end
 if const == 1
-    rmse_tot_const = (1 / No_runs) * sum( rmse_const);
+    rmse_tot_const = mean(rmse_const , 'omitnan');
     sprintf('RMSE for const gain approximation - %0.5g', rmse_tot_const)
 end
 if sis == 1
-    rmse_tot_sis = (1 / No_runs) * sum ( rmse_sis);
+    rmse_tot_sis = mean(rmse_sis, 'omitnan');
     sprintf('RMSE for SIS PF - %0.5g', rmse_tot_sis)
 end
 if kalman == 1
-    rmse_tot_kal   = (1 / No_runs) * sum( rmse_kal);
+    rmse_tot_kal   = mean(rmse_kal, 'omitnan');
     sprintf('RMSE for Kalman Filter - %0.5g', rmse_tot_kal)
 end
 

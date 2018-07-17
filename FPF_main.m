@@ -21,11 +21,11 @@ No_runs = 1;   % Total number of runs to compute the rmse metric for each of the
 
 %% Flags to be set to choose which methods to compare
 
-exact = 1;           % Computes the exact gain and plots 
+exact = 0;           % Computes the exact gain and plots 
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
-const = 0;           % Computes the constant gain approximation
+const = 1;           % Computes the constant gain approximation
 kalman = 1;          % Runs Kalman Filter for comparison
 sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
 

@@ -1,4 +1,8 @@
 Figures/
 *.asv
 *.m~
+*.fig
+*.jpg
+*.pdf
+Figures_multi/
 desktop.ini

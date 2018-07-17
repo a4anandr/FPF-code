@@ -13,7 +13,6 @@ close all;
 format short g;
 tic
 
-syms x u;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
@@ -32,14 +31,10 @@ exact = 0;           % Computes the exact gain and plots
 fin   = 0;           % Computes gain using finite dimensional basis
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
-<<<<<<< HEAD
-kalman = 0;          % Runs Kalman Filter for comparison
-sis    = 1; 
-=======
 const = 1;           % Computes the constant gain approximation
 kalman = 1;          % Runs Kalman Filter for comparison
-sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
->>>>>>> multidimensional
+sis    = 1;          % Runs Sequential Importance Sampling Particle Filter
+
 
 %% FPF parameters
 
@@ -75,37 +70,15 @@ K_min = -100;
 T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;        % Time increments for the SDE
 
-<<<<<<< HEAD
 sigmaB = 0;             % 0 if no noise in state process
 I_load_init = interp1(C_rate_profile(:,1),C_rate_profile(:,2),0,'previous','extrap')*I_1C;
-=======
-% State process parameters
-% a = - 2 * x;           % 0 for a steady state process
-a = 0; 
-if a == 0
-    a_x      = @(x) 0;
-    a_der_x  = @(x) 0;
-    a_legend = num2str(a);
-else
-    a_x = @(x) eval(a);
-    a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
-    a_legend = char(a);
-end
-sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
-% If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
->>>>>>> multidimensional
 
-c_x = diff(spm_battery_voltage(x,u,param_spm),x);
 sigmaW = 0.3;
 
-<<<<<<< HEAD
+
 % Parameters of p(0) - 2 component Gaussian mixture density - Prior needs
 % to be initialized with the range of concentration values
 m = 2; 
-=======
-%% Parameters of the prior p(0) - 2 component Gaussian mixture density 
-m = 2;
->>>>>>> multidimensional
 sigma = [0.1 0.1]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
@@ -138,13 +111,8 @@ Xi_const(1,:)= Xi_0;
 
 %  Sequential Importance Sampling Particle Filter Initialization
 Xi_sis(1,:)  = Xi_0;
-<<<<<<< HEAD
 Wi_sis(1,:)  = (1/N) * ones(1,N);
 Zi_sis(1,:)  = spm_battery_voltage(Xi_sis(1,:),I_load_init,param_spm);
-=======
-Wi_sis(1,:)  = (1/N) * ones(1,N);          % Initializing all weights to equal value.
-Zi_sis(1,:)  = c_x(Xi_sis(1,:)) * dt;
->>>>>>> multidimensional
 
 % Kalman filter - Initialization
 if kalman == 1
@@ -166,18 +134,12 @@ X(1)   = param_spm.cs_p_init;  % + Gaussian
 Z(1)   = spm_battery_voltage(X(1),I_load_init,param_spm) + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
-<<<<<<< HEAD
+
     k
     I_load = interp1(C_rate_profile(:,1),C_rate_profile(:,2),k*dt,'previous','extrap')*I_1C;
 
     X(k) = X(k-1) +   a_spm(param_spm,X(k-1),I_load) * dt + sigmaB * sdt * randn;
     Z(k) = Z(k-1) +   c_x(X(k),I_load,param_spm)  * dt + sigmaW * sdt * randn; 
-=======
-    % k
-    
-    X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
-    Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
->>>>>>> multidimensional
     
     if k == 2 
         dZ(k) = Z(k) - Z(k-1); 
@@ -227,55 +189,17 @@ for k = 2: 1: (T/dt)
     end
         
     for i = 1:N
-       % i) Using exact solution of gain
-       common_rand = randn;
-       if exact == 1
-<<<<<<< HEAD
-           mu_exact(k-1)    = mean(Xi_exact(k-1,:));
-           c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:),I_load,param_spm));
-           dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i),I_load,param_spm) + c_hat_exact(k-1)) * dt;
-           Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_exact(k,i) * dI_exact(k);
-=======
-           dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
-           Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * common_rand + (1/ R) * K_exact(k,i) * dI_exact(k);
->>>>>>> multidimensional
-       end
        
-       % ii) Finite dimensional basis 
-       if fin == 1
-<<<<<<< HEAD
-           mu_fin(k-1)      = mean(Xi_fin(k-1,:));
-           c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:),I_load,param_spm));
-           dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i),I_load,param_spm) + c_hat_fin(k-1)) * dt;
-           Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * randn + (1/ R) * K_fin(k,i) * dI_fin(k);
-=======
-           dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
-           Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * common_rand + (1/ R) * K_fin(k,i) * dI_fin(k);
->>>>>>> multidimensional
-       end
-       
-       % iii) Coifman kernel
+     % iii) Coifman kernel
        if coif == 1
-<<<<<<< HEAD
-           mu_coif(k-1)     = mean(Xi_coif(k-1,:));
-           c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:),I_load,param_spm));
            dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i),I_load,param_spm) + c_hat_coif(k-1)) * dt;
-=======
-           dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
->>>>>>> multidimensional
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
            Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_coif(k,i) * dI_coif(k);
        end
        
        % iv) RKHS
        if rkhs == 1
-<<<<<<< HEAD
-           mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
-           c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:),I_load,param_spm));
            dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i),I_load,param_spm) + c_hat_rkhs(k-1)) * dt;
-=======
-           dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
->>>>>>> multidimensional
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
        end
@@ -287,17 +211,10 @@ for k = 2: 1: (T/dt)
        end
        
        % vi) Sequential Importance Sampling Particle Filter (SIS PF)
-       if sis == 1
-<<<<<<< HEAD
-          mu_sis(k-1)       = Wi_sis(k-1,:)*Xi_sis(k-1,:)';
-          Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * randn; 
-          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i),I_load,param_spm)   * dt; 
-          Wi_sis(k,i)       = (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));
-=======
+       if sis == 1 
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * common_rand; 
-          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
+          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i),I_load,param_spm)   * dt;  
           Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Based on eqn(63) of Arulampalam et al. In our example, the importance density is the prior density p(X_t | X_{t-1}). If resampling is done at every step then the recursive form disappears. Wi_sis(k) does not depend on Wi_sis(k-1) as Wi_sis(k-1) = 1/N.
->>>>>>> multidimensional
        end
               
     end

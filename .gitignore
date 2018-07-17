@@ -1,4 +1,11 @@
 Figures/
 *.asv
 *.m~
+<<<<<<< HEAD
+=======
+*.fig
+*.jpg
+*.pdf
+Figures_multi/
+>>>>>>> multidimensional
 desktop.ini

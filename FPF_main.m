@@ -139,7 +139,7 @@ for k = 2: 1: (T/dt)
     I_load = interp1(C_rate_profile(:,1),C_rate_profile(:,2),k*dt,'previous','extrap')*I_1C;
 
     X(k) = X(k-1) +   a_spm(param_spm,X(k-1),I_load) * dt + sigmaB * sdt * randn;
-    Z(k) = Z(k-1) +   c_x(X(k),I_load,param_spm)  * dt + sigmaW * sdt * randn; 
+    Z(k) = Z(k-1) +   spm_battery_voltage(X(k),I_load,param_spm)  * dt + sigmaW * sdt * randn; 
     
     if k == 2 
         dZ(k) = Z(k) - Z(k-1); 
@@ -147,40 +147,10 @@ for k = 2: 1: (T/dt)
         dZ(k) = 0.5 * (Z(k) - Z(k-2));
     end
     
-    if exact == 1
-        [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
-        [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
-        mu_exact(k-1)    = mean(Xi_exact(k-1,:));         % Suspect these two lines need to be outside the for loop with N
-        c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
-    end
-    
-    if fin == 1
-        [K_fin(k,:)  ] = gain_fin(Xi_fin(k-1,:), c_x, d , basis, mu, sigma, p, diag_fn);
-        mu_fin(k-1)      = mean(Xi_fin(k-1,:));
-        c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
-    end
-    
-    if coif == 1
-        [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
-        mu_coif(k-1)     = mean(Xi_coif(k-1,:));
-        c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
-    end 
-    
-    if rkhs == 1
-        if k == 2
-            alpha = 0;
-        else
-            alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
-        end
-        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
-        mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
-        c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
-    end
-    
     if const == 1
         mu_const(k-1)     = mean(Xi_const(k-1,:));
-        c_hat_const(k-1)  = mean(c_x(Xi_const(k-1,:))); 
-        K_const(k)        = mean((c_x(Xi_const(k-1,:)) - c_hat_const(k-1)) .* Xi_const(k-1,:));
+        c_hat_const(k-1)  = mean(spm_battery_voltage(Xi_const(k-1,:),I_load,param_spm)); 
+        K_const(k)        = mean((spm_battery_voltage(Xi_const(k-1,:),I_load,param_spm) - c_hat_const(k-1)) .* Xi_const(k-1,:));
     end
     
     if sis == 1
@@ -190,30 +160,16 @@ for k = 2: 1: (T/dt)
         
     for i = 1:N
        
-     % iii) Coifman kernel
-       if coif == 1
-           dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i),I_load,param_spm) + c_hat_coif(k-1)) * dt;
-           K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
-           Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_coif(k,i) * dI_coif(k);
-       end
-       
-       % iv) RKHS
-       if rkhs == 1
-           dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i),I_load,param_spm) + c_hat_rkhs(k-1)) * dt;
-           K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
-           Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
-       end
-       
        % v) Constant gain approximation 
        if const == 1
-           dI_const(k)       = dZ(k) - 0.5 * (c_x(Xi_const(k-1,i)) + c_hat_const(k-1)) * dt;          
+           dI_const(k)       = dZ(k) - 0.5 * (spm_battery_voltage(Xi_const(k-1,i),I_load,param_spm) + c_hat_const(k-1)) * dt;          
            Xi_const(k,i)     = Xi_const(k-1,i) + a_x(Xi_const(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_const(k) * dI_const(k);
        end
        
        % vi) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1 
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * common_rand; 
-          Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i),I_load,param_spm)   * dt;  
+          Zi_sis(k,i)       = Zi_sis(k-1,i) + spm_battery_voltage(Xi_sis(k,i),I_load,param_spm)   * dt;  
           Wi_sis(k,i)       = Wi_sis(k-1,i) * (1/sqrt( 2 * pi * R * dt)) * exp ( - (Z(k) - Zi_sis(k,i))^2/ (2 * R * dt));   %  Based on eqn(63) of Arulampalam et al. In our example, the importance density is the prior density p(X_t | X_{t-1}). If resampling is done at every step then the recursive form disappears. Wi_sis(k) does not depend on Wi_sis(k-1) as Wi_sis(k-1) = 1/N.
        end
               
@@ -227,7 +183,7 @@ for k = 2: 1: (T/dt)
     
  % vii) Extended Kalman Filter for comparison
  if kalman == 1
-      X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1)) * dt + K_kal(k-1) * (dZ(k-1) - c_x(X_kal(k-1),I_load,param_spm) * dt);  % Kalman Filtered state estimate   
+      X_kal(k)= X_kal(k-1) + a_x(X_kal(k-1)) * dt + K_kal(k-1) * (dZ(k-1) - spm_battery_voltage(X_kal(k-1),I_load,param_spm) * dt);  % Kalman Filtered state estimate   
       P(k)    = P(k-1)+ 2 * a_der_x(X_kal(k-1)) * P(k-1) * dt+ Q * dt - (K_kal(k-1)^2) * R * dt;     % Evolution of covariance
       K_kal(k)= (P(k)* c_der_x(X_kal(k-1)))/R;                                                % Computation of Kalman Gain     
  end

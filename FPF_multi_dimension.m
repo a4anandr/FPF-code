@@ -20,11 +20,11 @@ close all;
 tic
 warning off;
 
-diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
+diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(1000);       % Set a common seed
-No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
+No_runs = 100;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
@@ -63,7 +63,7 @@ R     = 1;                 % theta^2, Observation noise covariance
 %% Parameters of the prior p(0) - Multivariate Gaussian density 
 X_0  = [ 0.5 -0.5];
 % Sig = 10 * eye(2);                 % 10 * eye(2) in the paper
-Sig = [1 0; 0 1];
+Sig = [5 0; 0 5];
 
 %% Filter parameters
 
@@ -80,11 +80,11 @@ end
 
 %% ii) RKHS
 if rkhs == 1
-   kernel   = 0;           % 0 for Gaussian kernel
-   lambda   = 0.01;        % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
-   eps_rkhs = 2;           % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
-   lambda_gain = 0;        % 1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
-   K_rkhs   = ones(1,N,d); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+   kernel   = 0;            % 0 for Gaussian kernel
+   lambda   = 1e-4;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
+   eps_rkhs = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
 %% iii) SIS PF
@@ -137,7 +137,7 @@ for run = 1: 1 : No_runs
 
 %% Initializing N particles from the prior
     Xi_0  = mvnrnd(X_0,Sig,N);
-    plot(Xi_0(:,1),Xi_0(:,2),'b*');    
+    % plot(Xi_0(:,1),Xi_0(:,2),'b*');    
     % Xi_0  = sort(Xi_0);       % Not to be done in 2 dimension - Sort the samples in ascending order for better visualization.
     mui_0 = mean(Xi_0);
     
@@ -171,7 +171,7 @@ for run = 1: 1 : No_runs
     end
 
 for k = 2: 1: (T/delta)    
-    k  
+    % k  
     %% Actual state - observation process evolution
     X(k,1)   = X(k-1,1) - X(k-1,2) * delta +   f1_x(X(k-1,:)) * delta + e1 * sdt * randn;        % ideally needs to be sdt
     X(k,2)   = X(k-1,2) + X(k-1,1) * delta +   f2_x(X(k-1,:)) * delta + e2 * sdt * randn;
@@ -280,7 +280,7 @@ for k = 2: 1: (T/delta)
             end
             Xi_sis(:,:,k)= Xi_sis_new;
             Wi_sis(:,k)    = (1/N) * ones(1,N);
-            N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
+            % N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
         end
    end
    N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
@@ -443,7 +443,7 @@ end
 
 % Overall rmse 
 if coif == 1
-    rmse_tot_coif = (1 / No_runs) * sum ( rmse_coif);
+    rmse_tot_coif = mean( rmse_coif);
     sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
 end
 if rkhs == 1

@@ -16,18 +16,18 @@ syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(3300);        % Set a common seed
-No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
+% rng(3300);     % Set a common seed
+No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
-exact = 0;           % Computes the exact gain and plots 
-fin   = 0;           % Computes gain using finite dimensional basis
-coif  = 0;           % Computes gain using Coifman kernel method
-rkhs  = 1;           % Computes gain using RKHS
-const = 1;           % Computes the constant gain approximation
-kalman = 1;          % Runs Kalman Filter for comparison
-sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
+exact = 1;       % Computes the exact gain and plots 
+fin   = 0;       % Computes gain using finite dimensional basis
+coif  = 0;       % Computes gain using Coifman kernel method
+rkhs  = 1;       % Computes gain using RKHS
+const = 1;       % Computes the constant gain approximation
+kalman = 1;      % Runs Kalman Filter for comparison
+sis    = 1;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -43,15 +43,21 @@ end
 % ii) Coifman kernel 
 if coif == 1
    eps_coif = 0.1;   % Time step parameter
+   Phi = zeros(N,1); % Initializing the solution to Poisson's equation with zeros
 end
 
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 0.1;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
-   eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
-   lambda_gain = 0; %1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   lambda   = 1e-2;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_rkhs = 0.5;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_gain = 3e-4;     % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+end
+
+% iv) SIS PF
+if sis ==1
+   resampling = 0;         % For periodic deterministic resampling of particles
 end
 
 % Setting a max and min threshold for gain
@@ -60,7 +66,7 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 5;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
@@ -87,7 +93,7 @@ sigmaW = 0.3;
 
 %% Parameters of the prior p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.1 0.1]; 
+sigma = [0.4 0.4]; 
 mu    = [-1 1]; 
 w     = [0.5 rand]; % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));
@@ -142,8 +148,7 @@ X(1)   = mu(2);
 Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
-    % k
-    
+    k    
     X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
     Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
     
@@ -155,19 +160,19 @@ for k = 2: 1: (T/dt)
     
     if exact == 1
         [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
-        [K_exact(k,:)] = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
+        [K_exact(k,:)]   = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
         mu_exact(k-1)    = mean(Xi_exact(k-1,:));         % Suspect these two lines need to be outside the for loop with N
         c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
     end
     
     if fin == 1
-        [K_fin(k,:)  ] = gain_fin(Xi_fin(k-1,:), c_x, d , basis, mu, sigma, p, diag_fn);
+        [K_fin(k,:)  ]   = gain_fin(Xi_fin(k-1,:), c_x, d , basis, mu, sigma, p, diag_fn);
         mu_fin(k-1)      = mean(Xi_fin(k-1,:));
         c_hat_fin(k-1)   = mean(c_x(Xi_fin(k-1,:)));
     end
     
     if coif == 1
-        [K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, diag_fn);
+        [Phi K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, Phi, diag_fn);
         mu_coif(k-1)     = mean(Xi_coif(k-1,:));
         c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
     end 
@@ -240,6 +245,39 @@ for k = 2: 1: (T/dt)
  if sis == 1
  % Normalizing the weights of the SIS - PF
      Wi_sis(k,:)  = Wi_sis(k,:)/ sum(Wi_sis(k,:));
+     if resampling == 1
+ % Deterministic resampling - as given in Budhiraja et al.
+        if mod(k,3)== 0
+            sum_N_eff = 0;
+            Wi_cdf    = zeros(N,1);
+            for i = 1 : N
+                N_eff(i) = floor(Wi_sis(k,i) *  N); 
+                Wi_res(i)= Wi_sis(k,i) - N_eff(i)/ N;
+                if i == 1
+                    Wi_cdf(i)= Wi_res(i);
+                else
+                    Wi_cdf(i)= Wi_cdf(i-1) + Wi_res(i);
+                end
+                if N_eff(i) > 0
+                    Xi_sis_new (sum_N_eff + 1 : sum_N_eff + N_eff(i),:) = repmat(Xi_sis(k,i),N_eff(i),1);
+                end
+                sum_N_eff = sum_N_eff + N_eff(i);
+            end  
+            N_res = N - sum_N_eff;
+            Wi_cdf = Wi_cdf / sum(Wi_res);
+            Wi_res = Wi_res / sum(Wi_res);  
+            for j = 1 : N_res
+                r = rand;
+                for i = 1 : N
+                    if (r < Wi_cdf(i))
+                        Xi_sis_new (sum_N_eff + j,:) = Xi_sis(k,i);
+                    end
+                end
+            end
+            Xi_sis(k,:)  = Xi_sis_new;
+            Wi_sis(k,:)  = (1/N) * ones(1,N);
+        end           
+     end
      N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
  end
     

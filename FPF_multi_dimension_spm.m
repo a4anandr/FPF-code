@@ -24,7 +24,7 @@ warning off;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(1000);       % Set a common seed
+% rng(1000);     % Set a common seed
 No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 C_rate_profile = csvread('t_vs_load_C_rate_constant.csv',1,0); % FOR EKF, discharge current is positive [Amps] load current flowing through external circuit. For LIONSIMBA,discharge current is negative
@@ -46,91 +46,29 @@ T   = 600;     % Total running time, using the same value in references [1],[2]
 delta = 1;     % Time increments for the SDE and observation model 
 sdt   = sqrt(delta); 
 
-% Model parameters
-zeta  = 2;
-Theta = 50;
-rho   = 9;
-d     = 2;        % State space dimension
-
-% State process initialization
-x =sym('x',[1 2]);
-mag_x = @(x)sqrt(x(1)^2 + x(2)^2);
-f1_x = @(x)zeta * ( x(1) / mag_x(x)^2) - Theta * (x(1) / mag_x(x)) * ( mag_x(x) > rho) ;
-f2_x = @(x)zeta * ( x(2) / mag_x(x)^2) - Theta * (x(1) / mag_x(x)) * ( mag_x(x) > rho) ;
+d     = 1;        % State space dimension
 
 % Process noise parameters
-e1 = 0.4;
-e2 = 0.4; 
-
+e1 = 0;
+ 
 % Observation process parameters
-h_x = @(x)atan(x(2)/x(1));
-theta = 0.32;              % Standard deviation parameter in observation process
-R     = 1;                 % theta^2, Observation noise covariance
+theta = 1e-2;                % Standard deviation parameter in observation process
 
 %% Parameters of the prior p(0) - Multivariate Gaussian density 
-X_0  = [ 0.5 -0.5];
-% Sig = 10 * eye(2);                 % 10 * eye(2) in the paper
-Sig = [1 0; 0 1];
+X_0 = [param_spm.cs_p_init];    % initial value of the state vector
+Sig = 1e-2;                     % initial state covariance ( 1e-2 (mol/m^3)^2)
 
 %% Filter parameters
 
-N = 500;          % No of particles - Common for all Monte Carlo methods used
+N = 500;       % No of particles - Common for all Monte Carlo methods used
 
 % Setting a max and min threshold for gain
 K_max = 100;
 K_min = -100;
  
-%% i) Coifman kernel 
-if coif == 1
-   eps_coif = 0.1;   % Time step parameter
-end
-
-%% ii) RKHS
-if rkhs == 1
-   kernel   = 0;           % 0 for Gaussian kernel
-   lambda   = 0.01;        % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
-   eps_rkhs = 2;           % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
-   lambda_gain = 0;        % 1e-4;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
-   K_rkhs   = ones(1,N,d); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
-end
-
-%% iii) SIS PF
+%% i) SIS PF
 if sis == 1 
     resampling = 1;        % Whether you need deterministic resampling 
-end
-
-%% iv) Extended Kalman Filter
-% Declaring symbolic functions and derivatives to be used in EKF
-if kalman == 1
-   syms y z;
-   % State process - Jacobian
-   f1_large = - z + zeta * (y/(y^2 + z^2)) - Theta * (y/sqrt(y^2 + z^2));
-   f1_small = - z + zeta * (y/(y^2 + z^2));
-   f2_large = y + zeta * (z/(y^2 + z^2)) - Theta * (z/sqrt(y^2 + z^2));
-   f2_small = y + zeta * (z/(y^2 + z^2));
-   
-   % Derivative functions to be used if x lies outside the ball of radius
-   % rho
-   f1_large_y = diff(f1_large,y);
-   f1_large_z = diff(f1_large,z);
-   f2_large_y = diff(f2_large,y);
-   f2_large_z = diff(f2_large,z);
-   
-   % Derivative functions to be used if x lies within the ball of radius
-   % rho
-   f1_small_y = diff(f1_small,y);
-   f1_small_z = diff(f1_small,z);
-   f2_small_y = diff(f2_small,y);
-   f2_small_z = diff(f2_small,z);
-  
-   % Observation process - Jacobian
-   h   = atan(z/y);
-   h_y = diff(h,y);
-   h_z = diff(h,z);
-   
-   % Process noise covariance - Q
-   Q = [ e1 0 ; 0 e2];
-   
 end
 
 for run = 1: 1 : No_runs
@@ -139,22 +77,13 @@ for run = 1: 1 : No_runs
     
 %% State and observation process initialization
     X(1,:)   = X_0;
-    Z(1)     = h_x(X(1,:)) + theta * randn;
-    Z_true(1)= h_x(X(1,:));
+    I_load   = interp1(C_rate_profile(:,1),C_rate_profile(:,2),0,'previous','extrap')*I_1C;
+    Z(1)     = spm_battery_voltage(X(1,:),I_load,param_spm) + theta * randn;
+    Z_true(1)= spm_battery_voltage(X(1,:),I_load,param_spm);
 
 %% Initializing N particles from the prior
-    Xi_0  = mvnrnd(X_0,Sig,N);
-    plot(Xi_0(:,1),Xi_0(:,2),'b*');    
-    % Xi_0  = sort(Xi_0);       % Not to be done in 2 dimension - Sort the samples in ascending order for better visualization.
+    Xi_0  = mvnrnd(X_0,Sig,N);   
     mui_0 = mean(Xi_0);
-    
-    if coif == 1
-        Xi_coif      = Xi_0;
-    end
-    
-    if rkhs ==1
-        Xi_rkhs      = Xi_0;
-    end
     
     if const == 1
         Xi_const     = Xi_0;
@@ -165,7 +94,7 @@ for run = 1: 1 : No_runs
        Xi_sis       = Xi_0;
        Wi_sis(:,1)  = (1/N) * ones(1,N);          % Initializing all weights to equal value.
        for i = 1:N
-           Zi_sis(i,:)  = h_x(Xi_sis(i,:));
+           Zi_sis(i,:)  = spm_battery_voltage(Xi_sis(i,:),I_load,param_spm);
        end
     end
 

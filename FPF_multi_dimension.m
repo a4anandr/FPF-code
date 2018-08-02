@@ -82,7 +82,7 @@ end
 if rkhs == 1
    kernel   = 0;            % 0 for Gaussian kernel
    lambda   = 1e-4;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
-   eps_rkhs = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   eps_rkhs = 1;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
    lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
@@ -153,7 +153,7 @@ for run = 1: 1 : No_runs
         Xi_const     = Xi_0;
     end
     
-%  Sequential Importance Sampling Particle Filter Initialization
+%  iii) Sequential Importance Sampling Particle Filter Initialization
     if sis == 1
        Xi_sis       = Xi_0;
        Wi_sis(:,1)  = (1/N) * ones(1,N);          % Initializing all weights to equal value.
@@ -162,7 +162,7 @@ for run = 1: 1 : No_runs
        end
     end
 
-%  Kalman filter - Initialization
+% iv) Extended Kalman filter - Initialization
     if kalman == 1
        X_kal        = mean(Xi_0);     % Initializing the Kalman filter state estimate to the mean at t = 0, More accurate initialization is X_0.
        P(:,:,1)     = Sig;            % Initializing the state covariance for the Kalman filter 
@@ -173,9 +173,9 @@ for run = 1: 1 : No_runs
 for k = 2: 1: (T/delta)    
     % k  
     %% Actual state - observation process evolution
-    X(k,1)   = X(k-1,1) - X(k-1,2) * delta +   f1_x(X(k-1,:)) * delta + e1 * sdt * randn;        % ideally needs to be sdt
+    X(k,1)   = X(k-1,1) - X(k-1,2) * delta +   f1_x(X(k-1,:)) * delta + e1 * sdt * randn;        
     X(k,2)   = X(k-1,2) + X(k-1,1) * delta +   f2_x(X(k-1,:)) * delta + e2 * sdt * randn;
-    if (mag_x(X(k,:)) > rho)
+    if (mag_x(X(k,:)) > rho)                                                                     % Counts the number of times the trajectory goes out of the circle of radius \rho
        ind_count = ind_count + 1;
     end
     Z(k)     = h_x(X(k,:))  + theta * randn; 
@@ -280,13 +280,12 @@ for k = 2: 1: (T/delta)
             end
             Xi_sis(:,:,k)= Xi_sis_new;
             Wi_sis(:,k)    = (1/N) * ones(1,N);
-            % N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
         end
    end
    N_eff_sis(k) = 1 / (sum(Wi_sis(k,:).^2)); 
  end
      
- % vii) Extended Kalman Filter for comparison
+ % iv) Extended Kalman Filter for comparison
  if kalman == 1
       X_kal(k,1)        = X_kal(k-1,1) - X_kal(k-1,2) * delta + f1_x(X_kal(k-1,:)) * delta + ( K_kal(1,k-1)/R) * (Z(k-1) - h_x(X_kal(k-1,:)));  % Kalman Filtered state estimate   
       X_kal(k,2)        = X_kal(k-1,2) + X_kal(k-1,1) * delta + f2_x(X_kal(k-1,:)) * delta + ( K_kal(2,k-1)/R) * (Z(k-1) - h_x(X_kal(k-1,:))); 
@@ -321,23 +320,23 @@ end
 %% Computing the rmse metric
 
 if coif == 1
-    mu_coif(k,:)      = mean(Xi_coif(k,:));
-    rmse_coif(run)  = (1 / (T/delta)) * sqrt(sum(sum((X - mu_coif).^2)));
+    mu_coif(k,:)    = mean(Xi_coif(k,:));
+    rmse_coif(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_coif).^2,2))));
 end
 if rkhs == 1
     mu_rkhs(k,:)    = mean(Xi_rkhs(:,:,k));
-    rmse_rkhs(run)  = (1 / (T/delta)) * sqrt(sum(sum((X - mu_rkhs).^2)));
+    rmse_rkhs(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_rkhs).^2,2))));
 end
 if const == 1
     mu_const(k,:)   = mean(Xi_const(:,:,k));
-    rmse_const(run) = (1 / (T/delta)) * sqrt(sum(sum((X - mu_const).^2)));
+    rmse_const(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_const).^2,2))));
 end
 if sis == 1
     mu_sis(k,:)     = Wi_sis(:,k)' * Xi_sis(:,:,k);
-    rmse_sis(run)   = (1 / (T/delta)) * sqrt( sum(sum ( (X - mu_sis).^2)));
+    rmse_sis(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_sis).^2,2))));
 end
 if kalman == 1
-    rmse_kal(run)   = (1 / (T/delta)) * sqrt( sum(sum( (X - X_kal).^2)));
+    rmse_kal(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - X_kal).^2,2))));
 end
 
 %% Plotting the state trajectory and estimates
@@ -443,7 +442,7 @@ end
 
 % Overall rmse 
 if coif == 1
-    rmse_tot_coif = mean( rmse_coif);
+    rmse_tot_coif = mean(rmse_coif);
     sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
 end
 if rkhs == 1

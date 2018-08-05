@@ -24,7 +24,7 @@ diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(1000);       % Set a common seed
-No_runs = 100;     % Total number of runs to compute the rmse metric for each of the filters for comparison
+No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
@@ -82,7 +82,7 @@ end
 if rkhs == 1
    kernel   = 0;            % 0 for Gaussian kernel
    lambda   = 1e-4;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
-   eps_rkhs = 1;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   eps_rkhs = 5;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
    lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end

@@ -48,23 +48,21 @@ function [K] = gain_fin(Xi,c,d,basis,mu,sigma,p,diag)
 psi_x = matlabFunction(psi);
 grad_psi = diff(psi); 
 grad_psi_x = matlabFunction(grad_psi);
-nabla_psi  = grad_psi_x(Xi);
 
 H   = c(Xi);
 eta = mean(c(Xi));
 
-for pi = 1:1:N
-    grad_psi_inner = (grad_psi_x(Xi(pi))'* grad_psi_x(Xi(pi)));
+for i = 1:1:N
+    grad_psi_inner = (grad_psi_x(Xi(i))'* grad_psi_x(Xi(i)));
     M = M + (1/N) * grad_psi_inner ;
-    b = b + (1/N) * (H(pi) - eta) * psi_x(Xi(pi))';
+    b = b + (1/N) * (H(i) - eta) * psi_x(Xi(i))';
 end
 
 theta = (M\b);
 
-for pi = 1:N
-    K(pi) = theta' * grad_psi_x(Xi(pi))';
+for i = 1:N
+    K(i) = theta' * grad_psi_x(Xi(i))';
 end
-toc
 
 if diag == 1
     figure;

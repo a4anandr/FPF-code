@@ -15,7 +15,7 @@ tic
 syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
-diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
+diag_fn = 1;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(3300);     % Set a common seed
 No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
@@ -25,9 +25,9 @@ exact = 1;       % Computes the exact gain and plots
 fin   = 0;       % Computes gain using finite dimensional basis
 coif  = 0;       % Computes gain using Coifman kernel method
 rkhs  = 1;       % Computes gain using RKHS
-const = 1;       % Computes the constant gain approximation
-kalman = 1;      % Runs Kalman Filter for comparison
-sis    = 1;      % Runs Sequential Importance Sampling Particle Filter 
+const = 0;       % Computes the constant gain approximation
+kalman = 0;      % Runs Kalman Filter for comparison
+sis    = 0;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -49,8 +49,8 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 5e-2;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
-   eps_rkhs = 0.25;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda   = 1e-3;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain =0;         % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end

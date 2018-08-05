@@ -26,7 +26,8 @@ diag_output = 1; % Diagnostics flag to display the main output in this function
 No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% SPM parameter initialization
-C_rate_profile = csvread('t_vs_load_C_rate_constant.csv',1,0); % FOR EKF, discharge current is positive [Amps] load current flowing through external circuit. For LIONSIMBA,discharge current is negative
+% C_rate_profile = csvread('t_vs_load_C_rate_constant.csv',1,0); % FOR EKF, discharge current is positive [Amps] load current flowing through external circuit. For LIONSIMBA,discharge current is negative
+C_rate_profile = csvread('t_vs_load_C_rate_udds.csv',0,0); % FOR EKF, discharge current is positive [Amps] load current flowing through external circuit. For LIONSIMBA,discharge current is negative
 I_1C         = 60; % Amps (1C current of the cell, i.e. cell capacity in disguise). Used only for desktop-simulation purposes.
 soc_init_pct = 100; % (percentage) Starting SoC
 param_spm = Parameters_spm(soc_init_pct);
@@ -37,7 +38,7 @@ sis   = 1;          % Runs Sequential Importance Sampling Particle Filter
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T     = 100;     % Total running time, using the same value in references [1],[2]
+T     = 50;     % Total running time, using the same value in references [1],[2]
 delta = 1;     % Time increments for the SDE and observation model 
 sdt   = sqrt(delta); 
 

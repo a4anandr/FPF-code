@@ -81,7 +81,7 @@ end
 %% ii) RKHS
 if rkhs == 1
    kernel   = 0;            % 0 for Gaussian kernel
-   lambda   = 1e-4;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
+   lambda   = 1e-3;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
    eps_rkhs = 5;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
    lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 

@@ -20,7 +20,7 @@ diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(1);     % Set a common seed
-No_runs = 100;     % Total number of runs to compute the rmse metric for each of the filters for comparison
+No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Parameters of the target density - 2 component Gaussian mixture density 
 m = 2;
@@ -67,6 +67,9 @@ coif  = 1;       % Computes h' using Coifman kernel method
 rkhs  = 1;       % Computes h' using RKHS
 const = 1;       % Computes the constant gain approximation
 
+% Flag for variance minimization - ZV-MCMC based on Mira et al. 
+var_min = 1; 
+
 % i) Finite dimensional basis
 if fin == 1
    d = 20;           % No of basis functions
@@ -107,7 +110,7 @@ for run = 1: 1 : No_runs
            end
        end
     end
-    c_hat_iid   = mean(c(X_iid)); 
+    c_hat_iid(run)   = mean(c(X_iid)); 
     
     if langevin == 1
        X_lang(1) = common_rand(1);
@@ -115,7 +118,7 @@ for run = 1: 1 : No_runs
            X_lang(n) = X_lang(n-1) - grad_U_x(X_lang(n-1)) * gamma +  sqrt(2) * sgamma * common_rand(n);
        end
     end
-    c_hat_lang   = mean(c(X_lang)); 
+    c_hat_lang(run)   = mean(c(X_lang)); 
     
     if metropolis == 1
         X_mh(1) = common_rand(1);
@@ -130,7 +133,7 @@ for run = 1: 1 : No_runs
             end
         end
     end
-    c_hat_mh   = mean(c(X_mh)); 
+    c_hat_mh(run)   = mean(c(X_mh)); 
     
     
 %% Computing the approximation \nabla h and the optimal control variates using various methods
@@ -163,18 +166,40 @@ for run = 1: 1 : No_runs
            [cv_X_iid]    = compute_cv(X_iid, K_fin_i, grad_U_x);
            c_fin_iid     = c(X_iid) + cv_X_iid;
            c_hat_fin_iid(run) = mean(c_fin_iid);
+           
+           if var_min == 1
+              [K_var_fin_i] = var_min_fin(X_iid, c, d, basis, mu, sigma, p_wt, grad_U, diag_fn);
+              [cv_X_iid]    = compute_cv(X_iid, K_var_fin_i, grad_U_x);
+              c_fin_iid     = c(X_iid) + cv_X_iid;
+              c_var_hat_fin_iid(run) = mean(c_fin_iid);
+           end
+           
         end
         if langevin == 1
            [K_fin_l]     = gain_fin(X_lang, c, d , basis, mu, sigma, p_wt, diag_fn);
            [cv_X_lang]   = compute_cv(X_iid, K_fin_l, grad_U_x);
            c_fin_lang    = c(X_lang) + cv_X_lang;
            c_hat_fin_lang(run) = mean(c_fin_lang);
+           
+           if var_min == 1
+              [K_var_fin_l] = var_min_fin(X_iid, c, d, basis, mu, sigma, p_wt, grad_U, diag_fn);
+              [cv_X_iid]    = compute_cv(X_iid, K_var_fin_l, grad_U_x);
+              c_fin_lang    = c(X_lang) + cv_X_lang;
+              c_var_hat_fin_lang(run) = mean(c_fin_lang);
+           end
         end
         if metropolis == 1
            [K_fin_m]     = gain_fin(X_mh, c, d , basis, mu, sigma, p_wt, diag_fn);
            [cv_X_mh]     = compute_cv(X_mh, K_fin_m, grad_U_x);
            c_fin_mh      = c(X_mh) + cv_X_mh;
            c_hat_fin_mh(run) = mean(c_fin_mh);
+           
+           if var_min == 1
+              [K_var_fin_m] = var_min_fin(X_iid, c, d, basis, mu, sigma, p_wt, grad_U, diag_fn);
+              [cv_X_mh]    = compute_cv(X_iid, K_var_fin_m, grad_U_x);
+              c_fin_mh    = c(X_mh) + cv_X_mh;
+              c_var_hat_fin_mh(run) = mean(c_fin_mh);
+           end
         end
     end
     
@@ -364,59 +389,77 @@ if No_runs > 1
 if iid == 1
    if exact == 1
       c_overall_exact_iid = mean(c_hat_exact_iid);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if fin == 1
       c_overall_fin_iid = mean(c_hat_fin_iid);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if coif == 1
       c_overall_coif_iid = mean(c_hat_coif_iid);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if rkhs == 1
       c_overall_rkhs_iid = mean(c_hat_rkhs_iid);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if const == 1
       c_overall_const_iid = mean(c_hat_const_iid);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
 end
    
 if langevin == 1
    if exact == 1
       c_overall_exact_lang = mean(c_hat_exact_lang);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if fin == 1
       c_overall_fin_lang = mean(c_hat_fin_lang);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if coif == 1
       c_overall_coif_lang = mean(c_hat_coif_lang);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if rkhs == 1
       c_overall_rkhs_lang = mean(c_hat_rkhs_lang);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if const == 1
       c_overall_const_lang = mean(c_hat_const_lang);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
 end
 
 if metropolis == 1
    if exact == 1
       c_overall_exact_mh = mean(c_hat_exact_mh);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if fin == 1
       c_overall_fin_mh = mean(c_hat_fin_mh);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if coif == 1
       c_overall_coif_mh = mean(c_hat_coif_mh);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if rkhs == 1
       c_overall_rkhs_mh = mean(c_hat_rkhs_mh);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
    if const == 1
       c_overall_const_mh = mean(c_hat_const_mh);
+      asym_var_exact_iid  = var(sqrt(N) * (c_hat_exact_iid - eta));
    end
 end
 
 % Histogram of asymptotic variance 
+figure;
 if iid == 1
+   histogram(sqrt(N) * (c_hat_iid - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Standard MC');
+   hold on;
    if exact == 1
       histogram(sqrt(N) * (c_hat_exact_iid - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Exact');
       hold on;
@@ -437,10 +480,14 @@ if iid == 1
       histogram(sqrt(N) * (c_hat_const_iid - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Const');
       hold on;
    end
-   title(['Asymptotic variance over ' num2str(No_runs) 'independent trials using iid sampling']); 
+   title(['Asymptotic variance over ' num2str(No_runs) ' independent trials using iid sampling']); 
+   legend('show');
 end
 
+figure;
 if langevin == 1
+   histogram(sqrt(N) * (c_hat_lang - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Standard MC');
+   hold on;
    if exact == 1
       histogram(sqrt(N) * (c_hat_exact_lang -eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Exact');
       hold on;
@@ -461,10 +508,14 @@ if langevin == 1
       histogram(sqrt(N) * (c_hat_const_lang - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Const');
       hold on;
    end
-   title(['Asymptotic variance over ' num2str(No_runs) 'independent trials using Langevin sampling']); 
+   title(['Asymptotic variance over ' num2str(No_runs) ' independent trials using Langevin sampling']); 
+   legend('show');
 end
 
+figure;
 if metropolis == 1
+   histogram(sqrt(N) * (c_hat_mh - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Standard MC');
+   hold on;
    if exact == 1
       histogram(sqrt(N) * (c_hat_exact_mh - eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Exact');
       hold on;
@@ -485,7 +536,8 @@ if metropolis == 1
       histogram(sqrt(N) * (c_hat_const_mh -eta),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'DisplayName','Const');
       hold on;
    end
-   title(['Asymptotic variance over ' num2str(No_runs) 'independent trials using RWM sampling']); 
+   title(['Asymptotic variance over ' num2str(No_runs) ' independent trials using RWM sampling']); 
+   legend('show');
 end
 end
 

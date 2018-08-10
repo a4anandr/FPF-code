@@ -15,19 +15,20 @@ tic
 syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
-diag_fn = 1;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
+diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(3300);     % Set a common seed
 No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
-exact = 1;       % Computes the exact gain and plots 
+exact = 0;       % Computes the exact gain and plots 
 fin   = 0;       % Computes gain using finite dimensional basis
 coif  = 0;       % Computes gain using Coifman kernel method
 rkhs  = 1;       % Computes gain using RKHS
-const = 0;       % Computes the constant gain approximation
-kalman = 0;      % Runs Kalman Filter for comparison
-sis    = 0;      % Runs Sequential Importance Sampling Particle Filter 
+zero_mean = 1;   % Computes gain using RKHS enforcing constant gain constraint
+const = 1;       % Computes the constant gain approximation
+kalman = 1;      % Runs Kalman Filter for comparison
+sis    = 1;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -49,20 +50,29 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 1e-3;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
-   eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda   = 1e-2;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_rkhs = 0.25;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain =0;         % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
-% iv) SIS PF
+% iv) RKHS zero mean
+if zero_mean == 1
+   kernel    = 0;          % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
+   lambda_zm = 1e-2;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_zm    = 0.25;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_gain_zm =0;      % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_zm   = ones(1,N);     % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+end
+
+% v) SIS PF
 if sis ==1
-   resampling = 0;         % For periodic deterministic resampling of particles
+   resampling = 1;         % For periodic deterministic resampling of particles
 end
 
 % Setting a max and min threshold for gain
 K_max = 100;
-K_min = 0;
+K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -70,7 +80,7 @@ T   = 2;         % Total running time - Using same values as in Amir's CDC paper
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-% a = - 2 * x;           % 0 for a steady state process
+a = - 2 * x;           % 0 for a steady state process
 a = 0; 
 if a == 0
     a_x      = @(x) 0;
@@ -81,7 +91,7 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+sigmaB = 1;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
@@ -120,6 +130,7 @@ Xi_exact(1,:)= Xi_0;      % Initializing the particles for all 4 approaches with
 Xi_fin(1,:)  = Xi_0;      
 Xi_coif(1,:) = Xi_0;
 Xi_rkhs(1,:) = Xi_0;
+Xi_zm(1,:)   = Xi_0;
 Xi_const(1,:)= Xi_0;
 
 
@@ -143,7 +154,6 @@ end
 
 
 %% State and observation process evolution
-% Initialization
 X(1)   = mu(2);
 Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
@@ -183,9 +193,20 @@ for k = 2: 1: (T/dt)
         else
             alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
-        [beta K_rkhs(k,:) ] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
+        [beta K_rkhs(k,:)] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
         mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
         c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
+    end
+    
+    if zero_mean == 1
+        if k == 2
+            alpha = 0;
+        else
+            alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+        end
+        [~, K_zm(k,:) ] = gain_rkhs_zero_mean(Xi_zm(k-1,:)', c_x, 1, kernel,lambda_zm, eps_zm, alpha, K_zm(k-1,:), diag_fn);
+        mu_zm(k-1)      = mean(Xi_zm(k-1,:));
+        c_hat_zm(k-1)   = mean(c_x(Xi_zm(k-1,:)));
     end
     
     if const == 1
@@ -200,31 +221,38 @@ for k = 2: 1: (T/dt)
     end
         
     for i = 1:N
-       % i) Using exact solution of gain
+       % 0) Using exact solution of gain
        common_rand = randn;
        if exact == 1
            dI_exact(k)      = dZ(k) - 0.5 * (c_x(Xi_exact(k-1,i)) + c_hat_exact(k-1)) * dt;
            Xi_exact(k,i)    = Xi_exact(k-1,i) + a_x(Xi_exact(k-1,i)) * dt + sigmaB * sdt * common_rand + (1/ R) * K_exact(k,i) * dI_exact(k);
        end
        
-       % ii) Finite dimensional basis 
+       % i) Finite dimensional basis 
        if fin == 1
            dI_fin(k)        = dZ(k) - 0.5 * (c_x(Xi_fin(k-1,i)) + c_hat_fin(k-1)) * dt;
            Xi_fin(k,i)      = Xi_fin(k-1,i) + a_x(Xi_fin(k-1,i)) * dt + sigmaB * sdt * common_rand + (1/ R) * K_fin(k,i) * dI_fin(k);
        end
        
-       % iii) Coifman kernel
+       % ii) Coifman kernel
        if coif == 1
            dI_coif(k)       = dZ(k) - 0.5 * (c_x(Xi_coif(k-1,i)) + c_hat_coif(k-1)) * dt;
            K_coif(k,i)      = min(max(K_coif(k,i),K_min),K_max);
            Xi_coif(k,i)     = Xi_coif(k-1,i) + a_x(Xi_coif(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_coif(k,i) * dI_coif(k);
        end
        
-       % iv) RKHS
+       % iii) RKHS
        if rkhs == 1
            dI_rkhs(k)       = dZ(k) - 0.5 * (c_x(Xi_rkhs(k-1,i)) + c_hat_rkhs(k-1)) * dt;
            K_rkhs(k,i)      = min(max(K_rkhs(k,i),K_min),K_max);
            Xi_rkhs(k,i)     = Xi_rkhs(k-1,i) + a_x(Xi_rkhs(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_rkhs(k,i) * dI_rkhs(k);
+       end
+       
+       % iv) RKHS zero mean
+       if zero_mean == 1
+           dI_zm(k)         = dZ(k) - 0.5 * (c_x(Xi_zm(k-1,i)) + c_hat_zm(k-1)) * dt;
+           K_zm(k,i)        = min(max(K_zm(k,i),K_min),K_max);
+           Xi_zm(k,i)       = Xi_zm(k-1,i) + a_x(Xi_zm(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_zm(k,i) * dI_zm(k);
        end
        
        % v) Constant gain approximation 
@@ -309,6 +337,9 @@ for k = 2: 1: (T/dt)
             plot(Xi_rkhs(k-1,:), K_rkhs(k,:), 'k^','DisplayName','RKHS');
             hold on;
         end
+        if zero_mean == 1
+            plot(Xi_zm(k-1,:) , K_zm(k,:), 'c+','DisplayName','Zero mean');
+        end
         if const ==1
             plot(Xi_const(k-1,:),K_const(k) * ones(1,N),'mv','DisplayName','Const');
             hold on;
@@ -344,7 +375,10 @@ for k = 2: 1: (T/dt)
             end
             if rkhs == 1
                hist(Xi_rkhs(k-1,:),N);
-            end             
+            end    
+            if zero_mean == 1
+               hist(Xi_zm(k-1,:),N);
+            end  
             if const == 1
                hist(Xi_const(k-1,:),N);
             end             
@@ -361,6 +395,10 @@ for k = 2: 1: (T/dt)
             end
             if rkhs == 1
                histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS at t =' num2str( (k-1)*dt )]);
+               hold on;
+            end
+            if zero_mean == 1
+               histogram(Xi_zm(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS(ZM) at t =' num2str( (k-1)*dt )]);
                hold on;
             end
             if const == 1
@@ -402,6 +440,10 @@ if rkhs == 1
     mu_rkhs(k)      = mean(Xi_rkhs(k,:));
     rmse_rkhs(run)  = (1 / (T/dt)) * sum ( (X - mu_rkhs).^2);
 end
+if zero_mean == 1
+    mu_zm(k)      = mean(Xi_zm(k,:));
+    rmse_zm(run)  = (1 / (T/dt)) * sum ( (X - mu_zm).^2);
+end
 if const == 1
     mu_const(k)     = mean(Xi_const(k,:));
     rmse_const(run) = (1 / (T/dt)) * sum ( (X - mu_const).^2);
@@ -433,6 +475,10 @@ if diag_output == 1
     end
     if rkhs == 1
         plot(0:dt:(k-1)*dt, mu_rkhs(1:k),'k--','DisplayName','RKHS');
+        hold on;
+    end
+    if zero_mean == 1
+        plot(0:dt:(k-1)*dt, mu_zm(1:k),'b--','DisplayName','RKHS(ZM)');
         hold on;
     end
     if const == 1
@@ -494,6 +540,10 @@ end
 if rkhs == 1
     rmse_tot_rkhs = (1 / No_runs) * sum( rmse_rkhs );
     sprintf('RMSE for RKHS method - %0.5g', rmse_tot_rkhs)
+end
+if zero_mean == 1
+    rmse_tot_zm = (1 / No_runs) * sum( rmse_zm );
+    sprintf('RMSE for RKHS(ZM) method - %0.5g', rmse_tot_zm)
 end
 if const == 1
     rmse_tot_const = (1 / No_runs) * sum( rmse_const);

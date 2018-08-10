@@ -3,8 +3,7 @@ function [K] = var_min_fin(Xi,c,d,basis,mu,sigma,p,grad_U,diag)
 % Computes the optimal parameter values for variance minimization - using
 % the principle in ZV-MCMC paper by Mira et al. 
 % Used for comparison with the asymptotic variance minimization method. 
-
-  tic;
+  tic
   syms x 
   N = length(Xi);
   M = zeros(d);
@@ -68,7 +67,8 @@ theta = -(M\b);
 for i = 1:N
     K(i) = theta' * grad_psi_x(Xi(i))';
 end
-
+toc
+%% For displaying figures
 if diag == 1
     figure;
     plot(Xi,K,'b*');

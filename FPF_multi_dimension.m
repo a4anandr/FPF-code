@@ -29,9 +29,10 @@ No_runs = 1;     % Total number of runs to compute the rmse metric for each of t
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
+zero_mean = 1;       % Computes gain using RKHS that takes into account the constant gain approximation values
 const = 1;           % Computes the constant gain approximation
-kalman = 0;          % Runs Kalman Filter for comparison
 sis    = 0;          % Runs Sequential Importance Sampling Particle Filter 
+kalman = 0;          % Runs Kalman Filter for comparison
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -81,18 +82,27 @@ end
 %% ii) RKHS
 if rkhs == 1
    kernel   = 0;            % 0 for Gaussian kernel
-   lambda   = 1e-3;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
-   eps_rkhs = 5;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   lambda   = 1e-1;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
+   eps_rkhs = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
    lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
-%% iii) SIS PF
+%% iii) RKHS zero mean
+if zero_mean == 1
+   kernel    = 0;            % 0 for Gaussian kernel
+   lambda_zm = 1e-1;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
+   eps_zm    = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   lambda_gain_zm = 0;       % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_zm   = ones(1,N,d);     % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+end
+
+%% iv) SIS PF
 if sis == 1 
     resampling = 1;        % Whether you need deterministic resampling 
 end
 
-%% iv) Extended Kalman Filter
+%% v) Extended Kalman Filter
 % Declaring symbolic functions and derivatives to be used in EKF
 if kalman == 1
    syms y z;
@@ -149,11 +159,15 @@ for run = 1: 1 : No_runs
         Xi_rkhs      = Xi_0;
     end
     
+    if zero_mean == 1
+        Xi_zm   = Xi_0;
+    end
+    
     if const == 1
         Xi_const     = Xi_0;
     end
     
-%  iii) Sequential Importance Sampling Particle Filter Initialization
+%  iv) Sequential Importance Sampling Particle Filter Initialization
     if sis == 1
        Xi_sis       = Xi_0;
        Wi_sis(:,1)  = (1/N) * ones(1,N);          % Initializing all weights to equal value.
@@ -162,7 +176,7 @@ for run = 1: 1 : No_runs
        end
     end
 
-% iv) Extended Kalman filter - Initialization
+% v) Extended Kalman filter - Initialization
     if kalman == 1
        X_kal        = mean(Xi_0);     % Initializing the Kalman filter state estimate to the mean at t = 0, More accurate initialization is X_0.
        P(:,:,1)     = Sig;            % Initializing the state covariance for the Kalman filter 
@@ -199,6 +213,17 @@ for k = 2: 1: (T/delta)
         K_const_rkhs(k,:)= mean(K_rkhs(k,:,:),2);
     end
     
+    if zero_mean == 1
+        if k == 2
+            alpha = 0;
+        else
+            alpha = (lambda_gain_zm / delta^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+        end
+        [h_hat_zm(k-1) K_zm(k,:,:)] = gain_rkhs_zero_mean(Xi_zm(:,:,k-1) , h_x, d , kernel,lambda_zm, eps_zm, alpha, K_zm(k-1,:,:) , diag_fn);
+        mu_zm(k-1,:)   = mean(Xi_zm(:,:,k-1));
+        K_const_zm(k,:)= mean(K_zm(k,:,:),2);
+    end
+    
     if const == 1   
         [h_hat_const(k-1) K_const(k,:)] = gain_const_multi(Xi_const(:,:,k-1), h_x, d, diag_fn);
         mu_const(k-1,:)   = mean(Xi_const(:,:,k-1));
@@ -230,14 +255,23 @@ for k = 2: 1: (T/delta)
            Xi_rkhs(i,2,k)   = Xi_rkhs(i,2,k-1) + Xi_rkhs(i,1,k-1) * delta + f2_x(Xi_rkhs(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_rkhs(k,i,2)/R) * dI_rkhs(k);
        end
        
-       % iii) Constant gain approximation 
+       % iii) RKHS zero mean
+       if zero_mean == 1
+           dI_zm(k)       = Z(k-1) - 0.5 * (h_x(Xi_zm(i,:,k-1)) + h_hat_zm(k-1));
+           K_zm(k,i,1)    = min(max(K_zm(k,i,1),K_min),K_max);
+           K_zm(k,i,2)    = min(max(K_zm(k,i,2),K_min),K_max);
+           Xi_zm(i,1,k)   = Xi_zm(i,1,k-1) - Xi_zm(i,2,k-1) * delta + f1_x(Xi_zm(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_zm(k,i,1)/R) * dI_zm(k);       % K_rkhs(k,i,1) * dI_rkhs(k)
+           Xi_zm(i,2,k)   = Xi_zm(i,2,k-1) + Xi_zm(i,1,k-1) * delta + f2_x(Xi_zm(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_zm(k,i,2)/R) * dI_zm(k);
+       end
+       
+       % iv) Constant gain approximation 
        if const == 1
            dI_const(k)      = Z(k-1) - 0.5 * (h_x(Xi_const(i,:,k-1)) + h_hat_const(k-1));          
            Xi_const(i,1,k)  = Xi_const(i,1,k-1) - Xi_const(i,2,k-1) * delta + f1_x(Xi_const(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_const(k,1)/R) * dI_const(k);    % (1/theta^2) is actually required?
            Xi_const(i,2,k)  = Xi_const(i,2,k-1) + Xi_const(i,1,k-1) * delta + f2_x(Xi_const(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_const(k,2)/R) * dI_const(k);
        end
        
-       % iv) Sequential Importance Sampling Particle Filter (SIS PF)
+       % v) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
           Xi_sis(i,1,k)     = Xi_sis(i,1,k-1) - Xi_sis(i,2,k-1) * delta  +  f1_x(Xi_sis(i,:,k-1)) * delta + e1 * sdt * common_rand(1); 
           Xi_sis(i,2,k)     = Xi_sis(i,2,k-1) + Xi_sis(i,1,k-1) * delta  +  f2_x(Xi_sis(i,:,k-1)) * delta + e2 * sdt * common_rand(2); 
@@ -327,6 +361,10 @@ if rkhs == 1
     mu_rkhs(k,:)    = mean(Xi_rkhs(:,:,k));
     rmse_rkhs(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_rkhs).^2,2))));
 end
+if zero_mean == 1
+    mu_zm(k,:)    = mean(Xi_zm(:,:,k));
+    rmse_zm(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_zm).^2,2))));
+end
 if const == 1
     mu_const(k,:)   = mean(Xi_const(:,:,k));
     rmse_const(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_const).^2,2))));
@@ -356,6 +394,10 @@ if (diag_output == 1 && No_runs == 1)
         plot(mu_rkhs(1:k,1), mu_rkhs(1:k,2),'k-x','linewidth',2.0,'DisplayName','FPF - RKHS');
         hold on;
     end
+    if zero_mean == 1
+        plot(mu_zm(1:k,1), mu_zm(1:k,2),'c-x','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        hold on;
+    end
     if const == 1
         plot(mu_const(1:k,1), mu_const(1:k,2),'b-s','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
@@ -381,6 +423,10 @@ if (diag_output == 1 && No_runs == 1)
         plot(0:delta:(k-1)*delta, mu_rkhs(1:k,1),'k--','linewidth',2.0,'DisplayName','FPF - RKHS');
         hold on;
     end
+    if zero_mean == 1
+        plot(0:delta:(k-1)*delta, mu_zm(1:k,1),'c--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        hold on;
+    end
     if const == 1
         plot(0:delta:(k-1)*delta, mu_const(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
@@ -404,6 +450,10 @@ if (diag_output == 1 && No_runs == 1)
     end
     if rkhs == 1
         plot(0:delta:(k-1)*delta, mu_rkhs(1:k,2),'k--','linewidth',2.0,'DisplayName','FPF - RKHS');
+        hold on;
+    end
+    if zero_mean == 1
+        plot(0:delta:(k-1)*delta, mu_zm(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
         hold on;
     end
     if const == 1
@@ -446,8 +496,12 @@ if coif == 1
     sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
 end
 if rkhs == 1
-    rmse_tot_rkhs = mean( rmse_rkhs, 'omitnan' );
+    rmse_tot_rkhs = mean(rmse_rkhs, 'omitnan' );
     sprintf('RMSE for RKHS method - %0.5g', rmse_tot_rkhs)
+end
+if zero_mean == 1
+    rmse_tot_zm = mean(rmse_zm, 'omitnan' );
+    sprintf('RMSE for RKHS method - %0.5g', rmse_tot_zm)
 end
 if const == 1
     rmse_tot_const = mean(rmse_const , 'omitnan');

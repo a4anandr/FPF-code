@@ -38,7 +38,7 @@ sis   = 1;          % Runs Sequential Importance Sampling Particle Filter
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T     = 50;     % Total running time, using the same value in references [1],[2]
+T     = 1300;     % Total running time, using the same value in references [1],[2]
 delta = 1;     % Time increments for the SDE and observation model 
 sdt   = sqrt(delta); 
 
@@ -52,14 +52,14 @@ theta = 1e-2;                % Standard deviation parameter in observation proce
 
 %% Parameters of the prior p(0) - Multivariate Gaussian density 
 X_0 = [param_spm.cs_p_init];    % initial value of the state vector
-Sig = 1;                     % initial state covariance ( 1e-2 (mol/m^3)^2)
+Sig = 10;                     % initial state covariance ( 1e-2 (mol/m^3)^2)
 
 %% Filter parameters
 N = 500;       % No of particles - Common for all Monte Carlo methods used
 
 % i) SIS PF
 if sis == 1 
-    resampling = 1;        % Whether you need deterministic resampling 
+    resampling = 0;        % Whether you need deterministic resampling 
 end
 
 for run = 1: 1 : No_runs

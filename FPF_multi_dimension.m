@@ -23,16 +23,16 @@ warning off;
 diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(1000);       % Set a common seed
-No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
+% rng(1000);     % Set a common seed
+No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
-rkhs  = 1;           % Computes gain using RKHS
+rkhs  = 0;           % Computes gain using RKHS
 zero_mean = 1;       % Computes gain using RKHS that takes into account the constant gain approximation values
 const = 1;           % Computes the constant gain approximation
-sis    = 0;          % Runs Sequential Importance Sampling Particle Filter 
-kalman = 0;          % Runs Kalman Filter for comparison
+sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
+kalman = 1;          % Runs Kalman Filter for comparison
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -45,6 +45,7 @@ zeta  = 2;
 Theta = 50;
 rho   = 9;
 d     = 2;        % State space dimension
+tol   = 10;       % Tolerance limit for 'losing the track' - 22 is used in the paper for square of the distance
 
 % State process initialization
 x =sym('x',[1 2]);
@@ -77,6 +78,7 @@ K_min = -100;
 %% i) Coifman kernel 
 if coif == 1
    eps_coif = 0.1;   % Time step parameter
+   lose_coif = 0;    % Initializing the "lose the track" count as specified in Budhiraja et al.
 end
 
 %% ii) RKHS
@@ -86,23 +88,36 @@ if rkhs == 1
    eps_rkhs = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
    lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+   
+   lose_rkhs = 0;    % Initializing the "lose the track" count as specified in Budhiraja et al.
 end
 
 %% iii) RKHS zero mean
 if zero_mean == 1
    kernel    = 0;            % 0 for Gaussian kernel
-   lambda_zm = 1e-1;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
+   lambda_zm = 1e-1;         % 1e-1 has worked best so far for Sig = [5 0 ; 0 5]
    eps_zm    = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
    lambda_gain_zm = 0;       % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_zm   = ones(1,N,d);     % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+   
+   lose_zm = 0;    % Initializing the "lose the track" count as specified in Budhiraja et al.
+
 end
 
-%% iv) SIS PF
+%% iv) Constant gain approximation
+if const == 1
+    lose_const = 0;        % Initializing the "lose the track" count as specified in Budhiraja et al.
+end
+
+%% v) SIS PF
 if sis == 1 
     resampling = 1;        % Whether you need deterministic resampling 
+    lag        = 3;        % After how many time samples should periodic resampling be done
+    
+    lose_sis = 0;          % Initializing the "lose the track" count as specified in Budhiraja et al.
 end
 
-%% v) Extended Kalman Filter
+%% vi) Extended Kalman Filter
 % Declaring symbolic functions and derivatives to be used in EKF
 if kalman == 1
    syms y z;
@@ -134,6 +149,8 @@ if kalman == 1
    % Process noise covariance - Q
    Q = [ e1 0 ; 0 e2];
    
+   lose_kal = 0;    % Initializing the "lose the track" count as specified in Budhiraja et al.
+   
 end
 
 for run = 1: 1 : No_runs
@@ -147,24 +164,26 @@ for run = 1: 1 : No_runs
 
 %% Initializing N particles from the prior
     Xi_0  = mvnrnd(X_0,Sig,N);
-    % plot(Xi_0(:,1),Xi_0(:,2),'b*');    
-    % Xi_0  = sort(Xi_0);       % Not to be done in 2 dimension - Sort the samples in ascending order for better visualization.
     mui_0 = mean(Xi_0);
     
     if coif == 1
         Xi_coif      = Xi_0;
+        first_coif   = 0;
     end
     
     if rkhs ==1
         Xi_rkhs      = Xi_0;
+        first_rkhs   = 0;
     end
     
     if zero_mean == 1
-        Xi_zm   = Xi_0;
+        Xi_zm        = Xi_0;
+        first_zm     = 0;
     end
     
     if const == 1
         Xi_const     = Xi_0;
+        first_const  = 0;
     end
     
 %  iv) Sequential Importance Sampling Particle Filter Initialization
@@ -174,6 +193,7 @@ for run = 1: 1 : No_runs
        for i = 1:N
            Zi_sis(i,:)  = h_x(Xi_sis(i,:));
        end
+       first_sis     = 0;
     end
 
 % v) Extended Kalman filter - Initialization
@@ -181,7 +201,8 @@ for run = 1: 1 : No_runs
        X_kal        = mean(Xi_0);     % Initializing the Kalman filter state estimate to the mean at t = 0, More accurate initialization is X_0.
        P(:,:,1)     = Sig;            % Initializing the state covariance for the Kalman filter 
        H            = [ subs(h_y,{y,z},X_kal) subs(h_z,{y,z},X_kal)];
-       K_kal(:,1)   = P(:,:,1) * H'; 
+       K_kal(:,1)   = P(:,:,1) * H';
+       first_kal    = 0;
     end
 
 for k = 2: 1: (T/delta)    
@@ -199,6 +220,10 @@ for k = 2: 1: (T/delta)
     if coif == 1
         [h_hat_coif(k-1) K_coif(k,:,:) ] = gain_coif_multi(Xi_coif(:,:,k-1) , h_x, d, eps_coif, diag_fn);
         mu_coif(k-1,:)   = mean(Xi_coif(:,:,k-1));
+        if (norm(mu_coif(k-1,:) - X(k-1,:)) > tol && first_coif == 0)
+            first_coif = first_coif + 1;
+            lose_coif = lose_coif + 1;
+        end
         K_const_coif(k,:)= mean(K_coif(k,:,:),2);
     end 
     
@@ -210,6 +235,10 @@ for k = 2: 1: (T/delta)
         end
         [h_hat_rkhs(k-1) K_rkhs(k,:,:)] = gain_rkhs_multi(Xi_rkhs(:,:,k-1) , h_x, d , kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:,:) , diag_fn);
         mu_rkhs(k-1,:)   = mean(Xi_rkhs(:,:,k-1));
+        if ( norm(mu_rkhs(k-1,:) - X(k-1,:)) > tol && first_rkhs == 0)
+            lose_rkhs  = lose_rkhs + 1;
+            first_rkhs = first_rkhs + 1;
+        end
         K_const_rkhs(k,:)= mean(K_rkhs(k,:,:),2);
     end
     
@@ -221,17 +250,29 @@ for k = 2: 1: (T/delta)
         end
         [h_hat_zm(k-1) K_zm(k,:,:)] = gain_rkhs_zero_mean(Xi_zm(:,:,k-1) , h_x, d , kernel,lambda_zm, eps_zm, alpha, K_zm(k-1,:,:) , diag_fn);
         mu_zm(k-1,:)   = mean(Xi_zm(:,:,k-1));
+        if (norm(mu_zm(k-1,:) - X(k-1,:)) > tol && first_zm == 0)
+            lose_zm  = lose_zm + 1;
+            first_zm = first_zm + 1;
+        end
         K_const_zm(k,:)= mean(K_zm(k,:,:),2);
     end
     
     if const == 1   
         [h_hat_const(k-1) K_const(k,:)] = gain_const_multi(Xi_const(:,:,k-1), h_x, d, diag_fn);
         mu_const(k-1,:)   = mean(Xi_const(:,:,k-1));
+        if (norm(mu_const(k-1,:) - X(k-1,:)) > tol && first_const ==0)
+            lose_const  = lose_const + 1;
+            first_const = first_const + 1;
+        end
     end
     
     if sis == 1
         mu_sis(k-1,:)     = Wi_sis(:,k-1)' * Xi_sis(:,:,k-1);
         N_eff_sis(k-1)    = 1 / sum(Wi_sis(:,k-1).^2);
+        if (norm(mu_sis(k-1,:) - X(k-1,:)) > tol && first_sis == 0)
+            lose_sis  = lose_sis + 1;
+            first_sis = first_sis + 1;
+        end
     end
         
     for i = 1:N
@@ -285,11 +326,14 @@ for k = 2: 1: (T/delta)
    Wi_sis(:,k)  = Wi_sis(:,k)/ sum(Wi_sis(:,k));
    if resampling == 1
  % Deterministic resampling - as given in Budhiraja et al.
-        if mod(k,3)== 0
+        if mod(k,lag)== 0
             sum_N_eff = 0;
             Wi_cdf    = zeros(N,1);
             for i = 1 : N
                 N_eff(i) = floor(Wi_sis(i,k) *  N); 
+                if isnan(N_eff(i)) == 1
+                    N_eff(i) = 0;
+                end
                 Wi_res(i)= Wi_sis(i,k) - N_eff(i)/ N;
                 if i == 1
                     Wi_cdf(i)= Wi_res(i);
@@ -330,6 +374,10 @@ for k = 2: 1: (T/delta)
           A = [ eval(subs(f1_small_y,{y,z},X_kal(k-1,:))) eval(subs(f1_small_z,{y,z},X_kal(k-1,:))); 
                 eval(subs(f2_small_y,{y,z},X_kal(k-1,:))) eval(subs(f2_small_z,{y,z},X_kal(k-1,:)))];
       end
+      if (norm(X_kal(k,:) - X(k,:)) > tol && first_kal == 0)
+          lose_kal = lose_kal + 1;
+          first_kal = first_kal + 1;
+      end
       H                 = [ eval(subs(h_y,{y,z},X_kal(k-1,:)))  eval(subs(h_z,{y,z},X_kal(k-1,:)))];
       P(:,:,k)          = P(:,:,k-1)+ ( A * P(:,:,k-1) + P(:,:,k-1) * A' + Q - K_kal(:,k-1) * H * P(:,:,k-1)) * delta;     % Evolution of covariance    
       K_kal(:,k)        = P(:,:,k) * H';                                   % Computation of Kalman Gain     
@@ -351,30 +399,36 @@ for k = 2: 1: (T/delta)
     end
 end    
 
-%% Computing the rmse metric
+%% Computing the rmse metric and the max error metric (to count losing the track)
 
 if coif == 1
-    mu_coif(k,:)    = mean(Xi_coif(k,:));
-    rmse_coif(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_coif).^2,2))));
+    mu_coif(k,:)       = mean(Xi_coif(k,:));
+    rmse_coif(run)     = mean(vecnorm(X - mu_coif,2,2));                                            % (1 / (T/delta)) * (sum(sqrt(sum((X - mu_coif).^2,2))));
+    max_diff_coif(run) = max(vecnorm(X - mu_coif,2,2)); 
 end
 if rkhs == 1
-    mu_rkhs(k,:)    = mean(Xi_rkhs(:,:,k));
-    rmse_rkhs(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_rkhs).^2,2))));
+    mu_rkhs(k,:)       = mean(Xi_rkhs(:,:,k));
+    rmse_rkhs(run)     = mean(vecnorm(X - mu_rkhs,2,2)); 
+    max_diff_rkhs(run) = max(vecnorm(X - mu_rkhs,2,2)); 
 end
 if zero_mean == 1
-    mu_zm(k,:)    = mean(Xi_zm(:,:,k));
-    rmse_zm(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_zm).^2,2))));
+    mu_zm(k,:)         = mean(Xi_zm(:,:,k));
+    rmse_zm(run)       = mean(vecnorm(X - mu_zm,2,2));
+    max_diff_zm(run)   = max(vecnorm(X - mu_zm,2,2)); 
 end
 if const == 1
-    mu_const(k,:)   = mean(Xi_const(:,:,k));
-    rmse_const(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_const).^2,2))));
+    mu_const(k,:)      = mean(Xi_const(:,:,k));
+    rmse_const(run)    = mean(vecnorm(X - mu_const,2,2));
+    max_diff_const(run)= max(vecnorm(X - mu_const,2,2)); 
 end
 if sis == 1
-    mu_sis(k,:)     = Wi_sis(:,k)' * Xi_sis(:,:,k);
-    rmse_sis(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - mu_sis).^2,2))));
+    mu_sis(k,:)       = Wi_sis(:,k)' * Xi_sis(:,:,k);
+    rmse_sis(run)     = mean(vecnorm(X - mu_sis,2,2));
+    max_diff_sis(run) = max(vecnorm(X - mu_sis,2,2)); 
 end
 if kalman == 1
-    rmse_kal(run)  = (1 / (T/delta)) * (sum(sqrt(sum((X - X_kal).^2,2))));
+    rmse_kal(run)     = mean(vecnorm(X - X_kal,2,2));
+    max_diff_kal(run) = max(vecnorm(X - X_kal,2,2)); 
 end
 
 %% Plotting the state trajectory and estimates
@@ -493,27 +547,45 @@ end
 % Overall rmse 
 if coif == 1
     rmse_tot_coif = mean(rmse_coif);
+    sprintf('---------------- Coifman ---------------')
     sprintf('RMSE for Coifman method - %0.5g', rmse_tot_coif)
+    sprintf(['Lost track ' num2str(lose_coif) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_coif))])
 end
 if rkhs == 1
     rmse_tot_rkhs = mean(rmse_rkhs, 'omitnan' );
+    sprintf('---------------- RKHS ---------------')
     sprintf('RMSE for RKHS method - %0.5g', rmse_tot_rkhs)
+    sprintf(['Lost track ' num2str(lose_rkhs) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_rkhs))])
 end
 if zero_mean == 1
     rmse_tot_zm = mean(rmse_zm, 'omitnan' );
-    sprintf('RMSE for RKHS method - %0.5g', rmse_tot_zm)
+    sprintf('---------------- RKHS (ZM) ---------------')
+    sprintf('RMSE for RKHS (ZM) method - %0.5g', rmse_tot_zm)
+    sprintf(['Lost track ' num2str(lose_zm) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_zm))])
 end
 if const == 1
     rmse_tot_const = mean(rmse_const , 'omitnan');
+    sprintf('---------------- Const gain ---------------')
     sprintf('RMSE for const gain approximation - %0.5g', rmse_tot_const)
+    sprintf(['Lost track ' num2str(lose_const) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_const))])
 end
 if sis == 1
     rmse_tot_sis = mean(rmse_sis, 'omitnan');
+    sprintf('---------------- SIS PF ---------------')
     sprintf('RMSE for SIS PF - %0.5g', rmse_tot_sis)
+    sprintf(['Lost track ' num2str(lose_sis) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_sis))])
 end
 if kalman == 1
     rmse_tot_kal   = mean(rmse_kal, 'omitnan');
+    sprintf('---------------- EKF ---------------')
     sprintf('RMSE for Kalman Filter - %0.5g', rmse_tot_kal)
+    sprintf(['Lost track ' num2str(lose_kal) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_kal))])
 end
 
 toc

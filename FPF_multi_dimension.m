@@ -24,7 +24,7 @@ diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(1000);     % Set a common seed
-No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
+No_runs = 100;   % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
@@ -111,7 +111,7 @@ end
 
 %% v) SIS PF
 if sis == 1 
-    resampling = 1;        % Whether you need deterministic resampling 
+    resampling = 0;        % Whether you need deterministic resampling 
     lag        = 3;        % After how many time samples should periodic resampling be done
     
     lose_sis = 0;          % Initializing the "lose the track" count as specified in Budhiraja et al.
@@ -434,7 +434,7 @@ end
 %% Plotting the state trajectory and estimates
 if (diag_output == 1 && No_runs == 1)   
     figure;
-    plot(X(1:k,1),X(1:k,2),'linewidth',2.0,'DisplayName','True state');
+    plot(X(1:k,1),X(1:k,2),'k','linewidth',2.0,'DisplayName','True state');
     hold on;
     th = 0:pi/50:2*pi;
     xunit = rho * cos(th);
@@ -449,15 +449,15 @@ if (diag_output == 1 && No_runs == 1)
         hold on;
     end
     if zero_mean == 1
-        plot(mu_zm(1:k,1), mu_zm(1:k,2),'c-x','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        plot(mu_zm(1:k,1), mu_zm(1:k,2),'b-x','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
         hold on;
     end
     if const == 1
-        plot(mu_const(1:k,1), mu_const(1:k,2),'b-s','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(mu_const(1:k,1), mu_const(1:k,2),'r-s','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if kalman == 1
-        plot(X_kal(1:k,1), X_kal(1:k,2),'r-^','linewidth',2.0,'DisplayName','EKF');
+        plot(X_kal(1:k,1), X_kal(1:k,2),'g-^','linewidth',2.0,'DisplayName','EKF');
         hold on;
     end
     if sis == 1
@@ -467,7 +467,7 @@ if (diag_output == 1 && No_runs == 1)
     legend('show');
    
     figure;
-    plot(0:delta:(k-1)*delta, X(1:k,1),'DisplayName','True state');
+    plot(0:delta:(k-1)*delta, X(1:k,1),'k','DisplayName','True state');
     hold on;
     if coif == 1
         plot(0:delta:(k-1)*delta, mu_coif(1:k,1),'c--','linewidth',2.0,'DisplayName','FPF - Coifman');
@@ -478,15 +478,15 @@ if (diag_output == 1 && No_runs == 1)
         hold on;
     end
     if zero_mean == 1
-        plot(0:delta:(k-1)*delta, mu_zm(1:k,1),'c--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        plot(0:delta:(k-1)*delta, mu_zm(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
         hold on;
     end
     if const == 1
-        plot(0:delta:(k-1)*delta, mu_const(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(0:delta:(k-1)*delta, mu_const(1:k,1),'r--','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if kalman == 1
-        plot(0:delta:(k-1)*delta, X_kal(1:k,1),'r--','linewidth',2.0,'DisplayName','EKF');
+        plot(0:delta:(k-1)*delta, X_kal(1:k,1),'g--','linewidth',2.0,'DisplayName','EKF');
         hold on;
     end
     if sis == 1
@@ -496,7 +496,7 @@ if (diag_output == 1 && No_runs == 1)
     legend('show');
     
     figure;
-    plot(0:delta:(k-1)*delta, X(1:k,1),'DisplayName','True state');
+    plot(0:delta:(k-1)*delta, X(1:k,1),'k','DisplayName','True state');
     hold on;
     if coif == 1
         plot(0:delta:(k-1)*delta, mu_coif(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - Coifman');
@@ -507,15 +507,15 @@ if (diag_output == 1 && No_runs == 1)
         hold on;
     end
     if zero_mean == 1
-        plot(0:delta:(k-1)*delta, mu_zm(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        plot(0:delta:(k-1)*delta, mu_zm(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
         hold on;
     end
     if const == 1
-        plot(0:delta:(k-1)*delta, mu_const(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(0:delta:(k-1)*delta, mu_const(1:k,2),'r--','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if kalman == 1
-        plot(0:delta:(k-1)*delta, X_kal(1:k,2),'r--','linewidth',2.0,'DisplayName','EKF');
+        plot(0:delta:(k-1)*delta, X_kal(1:k,2),'g--','linewidth',2.0,'DisplayName','EKF');
         hold on;
     end
     if sis == 1

@@ -1,4 +1,4 @@
-function [eta K] = gain_rkhs_zero_mean( Xi , h , d, kernel, lambda, epsilon, alpha, K_prev, diag)
+function [eta K] = gain_rkhs_zero_mean( Xi , h , d, kernel, lambda, epsilon, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
 % tic;
 N = length(Xi);

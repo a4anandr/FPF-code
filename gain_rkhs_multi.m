@@ -1,4 +1,4 @@
-function [eta K] = gain_rkhs_multi( Xi , h , d, kernel, lambda, epsilon, alpha, K_prev, diag)
+function [eta K] = gain_rkhs_multi( Xi , h , d, kernel, lambda, epsilon, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
 % tic;
 N = length(Xi);
@@ -22,21 +22,23 @@ for i = 1:N
 end
 
 % b used in simplified algorithm - searching on a smaller subspace of the Hilbert space H
-b_m     = (1/N) * ( Ker * Y' + alpha * ( Ker_x(:,:,1)' * K_prev(:,:,1)' + Ker_x(:,:,2)' * K_prev(:,:,2)')); 
-M_m     = lambda * Ker + ((1 + alpha)/ N) * (Ker_x(:,:,1)' * Ker_x(:,:,1) + Ker_x(:,:,2)' * Ker_x(:,:,2));       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
+Ker_x_sum = zeros(N,N);
+for d_i = 1 : d
+    Ker_x_sum         =  Ker_x_sum + Ker_x(:,:,d_i)'* Ker_x(:,:,d_i);
+end
+b_m     = (1/N) * ( Ker * Y'); 
+M_m     = lambda * Ker + (1 / N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
 beta_m  = M_m \ b_m;
- 
-        
- for i = 1: 1 : N
+
+for i = 1: 1 : N
      K(i,:)     = zeros(1,d);
      for k = 1 : 1 : N
          for d_i = 1 : d
              K(i,d_i)      = K(i,d_i)     + beta_m(k)  * Ker_x(i,k,d_i);      % Ker_x(pj,pi)
          end   
      end
- end
+end
 
- 
 if diag == 1
     figure(100);
     clf;

@@ -24,7 +24,7 @@ diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1; % Diagnostics flag to display the main output in this function
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(1000);     % Set a common seed
-No_runs = 100;   % Total number of runs to compute the rmse metric for each of the filters for comparison
+No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
@@ -86,21 +86,19 @@ if rkhs == 1
    kernel   = 0;            % 0 for Gaussian kernel
    lambda   = 1e-1;         % 0.01 has worked best so far for Sig = [1 0 ; 0 1]
    eps_rkhs = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
-   lambda_gain = 0;         % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N,d);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
    
-   lose_rkhs = 0;    % Initializing the "lose the track" count as specified in Budhiraja et al.
+   lose_rkhs = 0;           % Initializing the "lose the track" count as specified in Budhiraja et al.
 end
 
 %% iii) RKHS zero mean
 if zero_mean == 1
-   kernel    = 0;            % 0 for Gaussian kernel
-   lambda_zm = 1e-1;         % 1e-1 has worked best so far for Sig = [5 0 ; 0 5]
-   eps_zm    = 2;            % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
-   lambda_gain_zm = 0;       % 2.5e-3;        % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
-   K_zm   = ones(1,N,d);     % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+   kernel    = 0;           % 0 for Gaussian kernel
+   lambda_zm = 1e-1;        % 1e-1 has worked best so far for Sig = [5 0 ; 0 5]
+   eps_zm    = 2;           % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
+   K_zm   = ones(1,N,d);    % Initializing the gain to a 1 vector, this value is used only at k = 1. 
    
-   lose_zm = 0;    % Initializing the "lose the track" count as specified in Budhiraja et al.
+   lose_zm = 0;             % Initializing the "lose the track" count as specified in Budhiraja et al.
 
 end
 
@@ -228,12 +226,7 @@ for k = 2: 1: (T/delta)
     end 
     
     if rkhs == 1
-        if k == 2
-            alpha = 0;
-        else
-            alpha = (lambda_gain / delta^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
-        end
-        [h_hat_rkhs(k-1) K_rkhs(k,:,:)] = gain_rkhs_multi(Xi_rkhs(:,:,k-1) , h_x, d , kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:,:) , diag_fn);
+        [h_hat_rkhs(k-1) K_rkhs(k,:,:)] = gain_rkhs_multi(Xi_rkhs(:,:,k-1) , h_x, d , kernel,lambda, eps_rkhs, diag_fn);
         mu_rkhs(k-1,:)   = mean(Xi_rkhs(:,:,k-1));
         if ( norm(mu_rkhs(k-1,:) - X(k-1,:)) > tol && first_rkhs == 0)
             lose_rkhs  = lose_rkhs + 1;
@@ -243,12 +236,7 @@ for k = 2: 1: (T/delta)
     end
     
     if zero_mean == 1
-        if k == 2
-            alpha = 0;
-        else
-            alpha = (lambda_gain_zm / delta^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
-        end
-        [h_hat_zm(k-1) K_zm(k,:,:)] = gain_rkhs_zero_mean(Xi_zm(:,:,k-1) , h_x, d , kernel,lambda_zm, eps_zm, alpha, K_zm(k-1,:,:) , diag_fn);
+        [h_hat_zm(k-1) K_zm(k,:,:)] = gain_rkhs_zero_mean(Xi_zm(:,:,k-1) , h_x, d , kernel,lambda_zm, eps_zm, diag_fn);
         mu_zm(k-1,:)   = mean(Xi_zm(:,:,k-1));
         if (norm(mu_zm(k-1,:) - X(k-1,:)) > tol && first_zm == 0)
             lose_zm  = lose_zm + 1;

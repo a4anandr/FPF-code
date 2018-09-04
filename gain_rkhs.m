@@ -15,45 +15,18 @@ if kernel == 0  % Gaussian
    
 elseif kernel == 1  % Coifman basis - NOT valid as Coifman kernel is not symmetric, but still keeping the code 
    g         =  exp(-(ones(N,1) * Xi - Xi' * ones(1,N)).^2/(4 * epsilon));  % Basic Gaussian kernel for constructing Coifman kernel
-  for pi = 1:1:N
-        for pj = 1:1:N
-            k(pi,pj) = g(pi,pj)./( sqrt( (1/N) * sum(g(pj,:)))); % Coifman kernel - sqrt( (1/N) * sum(g(pi,:)))
+  for i = 1:1:N
+        for j = 1:1:N
+            k(i,j) = g(i,j)./( sqrt( (1/N) * sum(g(j,:)))); % Coifman kernel - sqrt( (1/N) * sum(g(pi,:)))
         end
-        Ker(pi,:)  = k(pi,:)./sum(k(pi,:));                                       % Markov semigroup approximation
+        Ker(i,:)  = k(i,:)./sum(k(i,:));                                       % Markov semigroup approximation
   end
-  for pi = 1:1:N
-      sum_term(pi) = Ker(pi,:) * Xi';
-      for pj = 1:1:N
-          Ker_x(pi,pj)    = (1/(2 * epsilon)) * Ker(pi,pj)* (Xi(pj) - sum_term(pi));  % Gain computed for particle index pi
+  for i = 1:1:N
+      sum_term(i) = Ker(i,:) * Xi';
+      for j = 1:1:N
+          Ker_x(i,j)    = (1/(2 * epsilon)) * Ker(i,j)* (Xi(j) - sum_term(i));  % Gain computed for particle index pi
       end
-  end
-  
-% elseif kernel == 2 % Approximate coifman basis, requires to run em and get p at each instant
-%     syms x
-%     p = 0;
-%     for i = 1:1:length(mu)
-%         p   = p + w(i) * exp (- norm(x - mu(i))^2 / (2 * sigma(i)^2)) * (1 / sqrt( 2 * 3.1416 * sigma(i)^2));
-%     end
-%     % Defining potential function U(x)
-%     p_x    = matlabFunction(p);
-%     Utot   = - log(p);
-%     Utot_mf  = matlabFunction(Utot);
-%     del_Utot = diff(Utot);
-%     del_Utot_mf= matlabFunction(del_Utot);
-%     
-%     % g         =  exp(-(ones(N,1) * Xi - Xi' * ones(1,N)).^2/(4 * epsilon));
-%     for pi = 1:1:N
-%         for pj = 1:1:N
-%             g(pi,pj) = exp(-(Xi(pi) - Xi(pj))^2/ (4 * epsilon));
-%             k(pi,pj) = g(pi,pj) * sqrt(p_x(Xi(pj))) / sqrt(p_x(Xi(pi))); % Coifman kernel - sqrt( (1/N) * sum(g(pi,:)))
-%         end
-%         Ker(pi,:)  = k(pi,:)./sum(k(pi,:));                                       % Markov semigroup approximation
-%     end
-%     for pi = 1:1:N
-%        for pj = 1:1:N
-%            Ker_x(pi,pj) = ((Xi(pj) - Xi(pi))/(2 * epsilon) + del_Utot_mf(Xi(pi))/2) * Ker(pi,pj);
-%        end
-%     end    
+  end     
 end
     
  H     = c(Xi);       
@@ -76,15 +49,15 @@ else
     beta_m  = M_m \ b_m;
 end  
         
- for pi = 1: 1 : N
-     K(pi)     = 0;
-     K_beta_2mi(pi)    = 0;
-     K_beta_dot_mi(pi) = 0;
-     for pj = 1 : 1 : N
-         K(pi)      = K(pi)     + beta_m(pj)  * Ker_x(pi,pj);      % Ker_x(pj,pi)
+ for i = 1: 1 : N
+     K(i)     = 0;
+     K_beta_2mi(i)    = 0;
+     K_beta_dot_mi(i) = 0;
+     for j = 1 : 1 : N
+         K(i)      = K(i)     + beta_m(j)  * Ker_x(i,j);      % Ker_x(pj,pi)
          if simplified == 0
-            K_beta_2mi(pi)     = K_beta_2mi(pi)    + beta_2m(pj) * Ker_x(pj,pi) + beta_2m(N+pj) * Ker_x_y(pj,pi);
-            K_beta_dot_mi(pi)  = K_beta_dot_mi(pi) - beta_m(pj)  * Ker_x_y(pj,pi);
+            K_beta_2mi(i)     = K_beta_2mi(i)    + beta_2m(j) * Ker_x(j,i) + beta_2m(N+j) * Ker_x_y(j,i);
+            K_beta_dot_mi(i)  = K_beta_dot_mi(i) - beta_m(j)  * Ker_x_y(j,i);
          end
      end
  end
@@ -96,11 +69,11 @@ if diag == 1
     hold on;
     plot(Xi,K_beta_2mi,'k^');
     
-    for pi = 1:249:N
+    for i = 1:249:N
         figure(1)
-        plot(Xi,Ker(:,pi),'r*');
+        plot(Xi,Ker(:,i),'r*');
         hold on;
-        plot(Xi,Ker_x(:,pi),'b*');  
+        plot(Xi,Ker_x(:,i),'b*');  
     end
 end
   

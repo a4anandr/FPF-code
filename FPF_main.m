@@ -16,19 +16,19 @@ syms x;
 diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(3300);     % Set a common seed
+% rng(200);     % Set a common seed
 No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
-exact = 0;       % Computes the exact gain and plots 
+exact = 1;       % Computes the exact gain and plots 
 fin   = 0;       % Computes gain using finite dimensional basis
 coif  = 0;       % Computes gain using Coifman kernel method
 rkhs  = 1;       % Computes gain using RKHS
 zero_mean = 1;   % Computes gain using RKHS enforcing constant gain constraint
-const = 1;       % Computes the constant gain approximation
-kalman = 1;      % Runs Kalman Filter for comparison
-sis    = 1;      % Runs Sequential Importance Sampling Particle Filter 
+const = 0;       % Computes the constant gain approximation
+kalman = 0;      % Runs Kalman Filter for comparison
+sis    = 0;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -50,7 +50,7 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 1e-2;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 1e-2;           % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.25;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain =0;         % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
@@ -59,8 +59,8 @@ end
 % iv) RKHS zero mean
 if zero_mean == 1
    kernel    = 0;          % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda_zm = 1e-2;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
-   eps_zm    = 0.25;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_zm = 1e-2;          % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_zm    = 0.25;       % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain_zm =0;      % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_zm   = ones(1,N);     % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
@@ -76,11 +76,11 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 2;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
-a = - 2 * x;           % 0 for a steady state process
+% a = - 2 * x;           % 0 for a steady state process
 a = 0; 
 if a == 0
     a_x      = @(x) 0;
@@ -91,7 +91,7 @@ else
     a_der_x = eval(['@(x)' char(diff(a_x(x)))]);   %  or matlabFunction(diff(a_x(x)));   
     a_legend = char(a);
 end
-sigmaB = 1;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
+sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulampalam et al. 
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
@@ -182,7 +182,7 @@ for k = 2: 1: (T/dt)
     end
     
     if coif == 1
-        [Phi K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, Phi, diag_fn);
+        [Phi K_coif(k,:) ] = gain_coif(Xi_coif(k-1,:) , c_x, eps_coif, Phi, N, diag_fn);
         mu_coif(k-1)     = mean(Xi_coif(k-1,:));
         c_hat_coif(k-1)  = mean(c_x(Xi_coif(k-1,:)));
     end 
@@ -194,6 +194,7 @@ for k = 2: 1: (T/dt)
             alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
         [beta K_rkhs(k,:)] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
+        [beta K_rkhs(k,:)] = gain_rkhs_multi(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
         mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
         c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
     end
@@ -202,7 +203,7 @@ for k = 2: 1: (T/dt)
         if k == 2
             alpha = 0;
         else
-            alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+            alpha = (lambda_gain_zm / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
         [~, K_zm(k,:) ] = gain_rkhs_zero_mean(Xi_zm(k-1,:)', c_x, 1, kernel,lambda_zm, eps_zm, alpha, K_zm(k-1,:), diag_fn);
         mu_zm(k-1)      = mean(Xi_zm(k-1,:));
@@ -322,7 +323,8 @@ for k = 2: 1: (T/dt)
     if ( diag_main == 1 && ( k == 2 | k == 3 | k == 11 || k == 21 || k == 31 || k == (T/dt))) 
         figure;
         if exact == 1
-            plot(Xi_exact(k-1,:), K_exact(k,:), 'rv','DisplayName','Exact'); 
+            [Xi_exact_s, ind_exact] = sort(Xi_exact(k-1,:));
+            plot(Xi_exact_s, K_exact(k,ind_exact), 'rv','DisplayName','Exact'); 
             hold on;
         end
         if fin == 1
@@ -334,11 +336,13 @@ for k = 2: 1: (T/dt)
             hold on;
         end
         if rkhs == 1
-            plot(Xi_rkhs(k-1,:), K_rkhs(k,:), 'k^','DisplayName','RKHS');
+            [Xi_rkhs_s, ind_rkhs] = sort(Xi_rkhs(k-1,:));
+            plot(Xi_rkhs_s, K_rkhs(k,ind_rkhs), 'b^','DisplayName','RKHS'); 
             hold on;
         end
         if zero_mean == 1
-            plot(Xi_zm(k-1,:) , K_zm(k,:), 'c+','DisplayName','Zero mean');
+            [Xi_zm_s, ind_zm] = sort(Xi_zm(k-1,:));
+            plot(Xi_zm_s, K_zm(k,ind_zm), 'c+','DisplayName','RKHS (ZM)'); 
         end
         if const ==1
             plot(Xi_const(k-1,:),K_const(k) * ones(1,N),'mv','DisplayName','Const');

@@ -1,4 +1,4 @@
-function [eta K] = gain_rkhs_zero_mean( Xi , h , d, kernel, lambda, epsilon, diag)
+function [eta K] = gain_rkhs_zm_mem( Xi , h , d, kernel, lambda, epsilon, alpha, K_prev, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
 % tic;
 N = length(Xi);
@@ -29,12 +29,12 @@ Ker_x_sum = zeros(N,N);
 for d_i = 1 : d
     Ker_x_ones(:,d_i) =  Ker_x(:,:,d_i) * ones(N,1);
     Ker_x_sum         =  Ker_x_sum + Ker_x(:,:,d_i)'* Ker_x(:,:,d_i);
-    M(1 : N, N + d_i) =  (1/N) * Ker_x_ones(:, d_i);              % There was no (1/N) previously, testing it now
+    M(1 : N, N + d_i) =  (1/N) * Ker_x_ones(:, d_i);              
     M(N + d_i, 1 : N) =  (1/N) * Ker_x_ones(:, d_i)';
 end
-b(1 : N, :)        =  (2/N) * Ker * Y'- (2/N) * Ker_x_ones * K_hat';
+b(1 : N, :)        =  (2/N) * Ker * Y'- (2/N) * ( Ker_x_ones * K_hat' + Ker_x' * K_prev');
 b(N+1 : N+d, :)    =  zeros(d,1);    
-M(1 : N, 1 : N)    =  2 * lambda * Ker + ( 2 / N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
+M(1 : N, 1 : N)    =  2 * lambda * Ker + ( 2 * (1 + alpha) / N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
 beta               =  M \ b;
  
         
@@ -48,4 +48,5 @@ beta               =  M \ b;
  end
 
 end
+
 

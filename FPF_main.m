@@ -13,22 +13,24 @@ close all;
 tic
 
 syms x;
-diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
+diag_main = 0;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
-% rng(200);     % Set a common seed
-No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
+% rng(200);      % Set a common seed
+No_runs = 100;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
-exact = 1;       % Computes the exact gain and plots 
-fin   = 0;       % Computes gain using finite dimensional basis
-coif  = 0;       % Computes gain using Coifman kernel method
-rkhs  = 1;       % Computes gain using RKHS
+exact  = 1;      % Computes the exact gain and plots 
+fin    = 0;      % Computes gain using finite dimensional basis
+coif   = 0;      % Computes gain using Coifman kernel method
+rkhs   = 1;      % Computes gain using RKHS
 zero_mean = 1;   % Computes gain using RKHS enforcing constant gain constraint
-const = 0;       % Computes the constant gain approximation
-kalman = 0;      % Runs Kalman Filter for comparison
-sis    = 0;      % Runs Sequential Importance Sampling Particle Filter 
+memory = 1;      % Computes gain using RKHS with a memory parameter for previous gain
+zm_mem = 1;      % Computes gain using const gain approx and a memory parameter for previous gain
+const  = 1;      % Computes the constant gain approximation
+kalman = 1;      % Runs Kalman Filter for comparison
+sis    = 1;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -50,22 +52,39 @@ end
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda   = 1e-2;           % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 1e-2;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.25;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
-   lambda_gain =0;         % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_rkhs   = ones(1,N);   % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
 % iv) RKHS zero mean
 if zero_mean == 1
    kernel    = 0;          % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
-   lambda_zm = 1e-2;          % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda_zm = 1e-2;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_zm    = 0.25;       % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain_zm =0;      % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_zm   = ones(1,N);     % Initializing the gain to a 1 vector, this value is used only at k = 1. 
 end
 
-% v) SIS PF
+% v) RKHS with memory
+if memory == 1
+   kernel     = 0;         % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
+   lambda_mem = 1e-3;      % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_mem    = 0.25;      % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_gain_mem = 1e-5;    % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_mem      = zeros(1,N); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+end
+
+% vi) RKHS ZM with memory
+if zm_mem == 1
+   kernel     = 0;         % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel using EM
+   lambda_zm_mem = 1e-3;      % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_zm_mem    = 0.25;      % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_gain_zm_mem = 1e-5;    % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_zm_mem      = zeros(1,N); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+end
+
+% vi) SIS PF
 if sis ==1
    resampling = 1;         % For periodic deterministic resampling of particles
 end
@@ -76,7 +95,7 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 1;           x% Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;        % Time increments for the SDE
 
 % State process parameters
@@ -95,11 +114,11 @@ sigmaB = 0;             % 0 if no noise in state process  -  Comments in Arulamp
 % If the process noise is zero, then using a particle filter is not entirely appropriate. Particle filtering is a method well suited to the estimation of dynamic states. If static states, which can be regarded as parameters, need to be estimated then alternative approaches are necessary 
 
 % Observation process parameters
-c = x;
+c =  x;
 c_x = matlabFunction(c);
 c_for_der_x = @(x) eval(c);
 c_der_x = eval (['@(x)' char(diff(c_for_der_x(x)))]);
-sigmaW = 0.3;
+sigmaW = 0.5;
 
 %% Parameters of the prior p(0) - 2 component Gaussian mixture density 
 m = 2;
@@ -131,6 +150,8 @@ Xi_fin(1,:)  = Xi_0;
 Xi_coif(1,:) = Xi_0;
 Xi_rkhs(1,:) = Xi_0;
 Xi_zm(1,:)   = Xi_0;
+Xi_mem(1,:)  = Xi_0;
+Xi_zm_mem(1,:) = Xi_0;
 Xi_const(1,:)= Xi_0;
 
 
@@ -158,7 +179,7 @@ X(1)   = mu(2);
 Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
-    k    
+    % k    
     X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
     Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
     
@@ -188,26 +209,38 @@ for k = 2: 1: (T/dt)
     end 
     
     if rkhs == 1
-        if k == 2
-            alpha = 0;
-        else
-            alpha = (lambda_gain / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
-        end
-        [beta K_rkhs(k,:)] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
-        [beta K_rkhs(k,:)] = gain_rkhs_multi(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
+        %[beta K_rkhs(k,:)] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
+        [~,K_rkhs(k,:)] = gain_rkhs_multi(Xi_rkhs(k-1,:)' , c_x, 1, kernel,lambda, eps_rkhs, diag_fn);
         mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
         c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
     end
     
     if zero_mean == 1
+        [~, K_zm(k,:) ] = gain_rkhs_zero_mean(Xi_zm(k-1,:)', c_x, 1, kernel,lambda_zm, eps_zm, diag_fn);
+        mu_zm(k-1)      = mean(Xi_zm(k-1,:));
+        c_hat_zm(k-1)   = mean(c_x(Xi_zm(k-1,:)));
+    end
+    
+    if memory == 1
         if k == 2
             alpha = 0;
         else
-            alpha = (lambda_gain_zm / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+            alpha = (lambda_gain_mem / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
         end
-        [~, K_zm(k,:) ] = gain_rkhs_zero_mean(Xi_zm(k-1,:)', c_x, 1, kernel,lambda_zm, eps_zm, alpha, K_zm(k-1,:), diag_fn);
-        mu_zm(k-1)      = mean(Xi_zm(k-1,:));
-        c_hat_zm(k-1)   = mean(c_x(Xi_zm(k-1,:)));
+        [~,K_mem(k,:)]   = gain_rkhs_memory( Xi_mem(k-1,:)', c_x, 1, kernel,lambda_mem, eps_mem, alpha, K_mem((k-1),:), diag_fn);
+        mu_mem(k-1)      = mean(Xi_mem(k-1,:));
+        c_hat_mem(k-1)   = mean(c_x(Xi_mem(k-1,:)));
+    end
+    
+    if zm_mem == 1
+        if k == 2
+            alpha = 0;
+        else
+            alpha = (lambda_gain_zm_mem / dt^2);  % Decides how much memory is required in updating the gain, higher value => slow variation.
+        end
+        [~,K_zm_mem(k,:)]   = gain_rkhs_zm_mem( Xi_zm_mem(k-1,:)', c_x, 1, kernel,lambda_zm_mem, eps_zm_mem, alpha, K_zm_mem((k-1),:), diag_fn);
+        mu_zm_mem(k-1)      = mean(Xi_zm_mem(k-1,:));
+        c_hat_zm_mem(k-1)   = mean(c_x(Xi_zm_mem(k-1,:)));
     end
     
     if const == 1
@@ -256,13 +289,27 @@ for k = 2: 1: (T/dt)
            Xi_zm(k,i)       = Xi_zm(k-1,i) + a_x(Xi_zm(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_zm(k,i) * dI_zm(k);
        end
        
-       % v) Constant gain approximation 
+       % v) Memory
+       if memory == 1
+           dI_mem(k)        = dZ(k) - 0.5 * (c_x(Xi_mem(k-1,i)) + c_hat_mem(k-1)) * dt;
+           K_mem(k,i)       = min(max(K_mem(k,i),K_min),K_max);
+           Xi_mem(k,i)      = Xi_mem(k-1,i) + a_x(Xi_mem(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_mem(k,i) * dI_mem(k);
+       end
+       
+       % vi) ZM + memory
+       if zm_mem == 1
+           dI_zm_mem(k)        = dZ(k) - 0.5 * (c_x(Xi_zm_mem(k-1,i)) + c_hat_zm_mem(k-1)) * dt;
+           K_zm_mem(k,i)       = min(max(K_zm_mem(k,i),K_min),K_max);
+           Xi_zm_mem(k,i)      = Xi_zm_mem(k-1,i) + a_x(Xi_zm_mem(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_zm_mem(k,i) * dI_zm_mem(k);
+       end
+       
+       % vii) Constant gain approximation 
        if const == 1
            dI_const(k)       = dZ(k) - 0.5 * (c_x(Xi_const(k-1,i)) + c_hat_const(k-1)) * dt;          
            Xi_const(k,i)     = Xi_const(k-1,i) + a_x(Xi_const(k-1,i)) * dt + sigmaB * sdt * common_rand + (1 / R) * K_const(k) * dI_const(k);
        end
        
-       % vi) Sequential Importance Sampling Particle Filter (SIS PF)
+       % viii) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
           Xi_sis(k,i)       = Xi_sis(k-1,i) + a_x(Xi_sis(k-1,i)) * dt + sigmaB * sdt * common_rand; 
           Zi_sis(k,i)       = Zi_sis(k-1,i) + c_x(Xi_sis(k,i))   * dt; 
@@ -320,42 +367,50 @@ for k = 2: 1: (T/dt)
 %% Displaying figures for diagnostics 
 
     % Plotting gains at k = 2, 3, 10, 20, 30, 40
-    if ( diag_main == 1 && ( k == 2 | k == 3 | k == 11 || k == 21 || k == 31 || k == (T/dt))) 
+    if ( No_runs == 1 && diag_main == 1 && ( k == 2 | k == 3 | k == 11 || k == 21 || k == 41 || k == (T/2 * dt) || k == (T/dt))) 
         figure;
         if exact == 1
             [Xi_exact_s, ind_exact] = sort(Xi_exact(k-1,:));
-            plot(Xi_exact_s, K_exact(k,ind_exact), 'rv','DisplayName','Exact'); 
+            plot(Xi_exact_s, K_exact(k,ind_exact), '--rv','MarkerSize',2,'DisplayName','Exact'); 
             hold on;
         end
         if fin == 1
-            plot(Xi_fin(k-1,:), K_fin(k,:), 'g*', 'DisplayName','Finite');  
+            plot(Xi_fin(k-1,:), K_fin(k,:), '--g*', 'MarkerSize',2,'DisplayName','Finite');  
             hold on;
         end
         if coif == 1
-            plot(Xi_coif(k-1,:), K_coif(k,:), 'bo','DisplayName','Coifman');
+            plot(Xi_coif(k-1,:), K_coif(k,:), '--yo','MarkerSize',2,'DisplayName','Coifman');
             hold on;
         end
         if rkhs == 1
             [Xi_rkhs_s, ind_rkhs] = sort(Xi_rkhs(k-1,:));
-            plot(Xi_rkhs_s, K_rkhs(k,ind_rkhs), 'b^','DisplayName','RKHS'); 
+            plot(Xi_rkhs_s, K_rkhs(k,ind_rkhs), '--b^','MarkerSize',2,'DisplayName','RKHS'); 
             hold on;
         end
         if zero_mean == 1
             [Xi_zm_s, ind_zm] = sort(Xi_zm(k-1,:));
-            plot(Xi_zm_s, K_zm(k,ind_zm), 'c+','DisplayName','RKHS (ZM)'); 
+            plot(Xi_zm_s, K_zm(k,ind_zm), '--c+','MarkerSize',2,'DisplayName','RKHS (ZM)'); 
+        end
+        if memory == 1
+            [Xi_mem_s, ind_mem] = sort(Xi_mem(k-1,:));
+            plot(Xi_mem_s, K_mem(k,ind_mem), '--g+','MarkerSize',2,'DisplayName','RKHS memory'); 
+        end
+        if zm_mem == 1
+            [Xi_zm_mem_s, ind_zm_mem] = sort(Xi_zm_mem(k-1,:));
+            plot(Xi_zm_mem_s, K_zm_mem(k,ind_zm_mem), 'Color', [0.2,0.3,0.7],'LineStyle','--','Marker','s','MarkerSize',2,'DisplayName','RKHS ZM + mem'); 
         end
         if const ==1
-            plot(Xi_const(k-1,:),K_const(k) * ones(1,N),'mv','DisplayName','Const');
+            plot(Xi_const(k-1,:),K_const(k) * ones(1,N),'--mv','MarkerSize',2,'DisplayName','Const');
             hold on;
         end
         title(['Gain at particle locations for ' num2str(N) ' particles at t = ' num2str((k-2) * dt)]);
         legend('show');
     end
     
-    if ( k == 2 || k == 0.5*(T/dt) || k == (T/dt))
+    if (No_runs==1 && (k == 2 || k == 0.5*(T/dt) || k == (T/dt)))
         step = 0.05;
         range = min(mu_em)- 3 * max(sigma_em): step : max(mu_em) + 3 * max(sigma_em);
-        figure(100);
+        figure;
         if exact == 1
           p_t = 0;         
           for i = 1: length(mu_em)
@@ -383,6 +438,12 @@ for k = 2: 1: (T/dt)
             if zero_mean == 1
                hist(Xi_zm(k-1,:),N);
             end  
+            if memory == 1
+               hist(Xi_mem(k-1,:),N);
+            end
+            if zm_mem == 1
+               hist(Xi_zm_mem(k-1,:),N);
+            end
             if const == 1
                hist(Xi_const(k-1,:),N);
             end             
@@ -398,15 +459,23 @@ for k = 2: 1: (T/dt)
                hold on;
             end
             if rkhs == 1
-               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_rkhs(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['RKHS at t =' num2str( (k-1)*dt )]);
                hold on;
             end
             if zero_mean == 1
-               histogram(Xi_zm(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using RKHS(ZM) at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_zm(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['RKHS(ZM) at t =' num2str( (k-1)*dt )]);
+               hold on;
+            end
+            if memory == 1
+               histogram(Xi_mem(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['RKHS memory at t =' num2str( (k-1)*dt )]);
+               hold on;
+            end
+            if zm_mem == 1
+               histogram(Xi_zm_mem(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['RKHS ZM + memory at t =' num2str( (k-1)*dt )]);
                hold on;
             end
             if const == 1
-               histogram(Xi_const(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Hist using const at t =' num2str( (k-1)*dt )]);
+               histogram(Xi_const(k-1,:),'Normalization','pdf','DisplayStyle','stairs','BinWidth',step,'BinLimits',[ min(mu_em) - 3 * max(sigma_em), max(mu_em) + 3 * max(sigma_em)],'DisplayName',['Const at t =' num2str( (k-1)*dt )]);
                hold on;
             end
        end  
@@ -448,6 +517,14 @@ if zero_mean == 1
     mu_zm(k)      = mean(Xi_zm(k,:));
     rmse_zm(run)  = (1 / (T/dt)) * sum ( (X - mu_zm).^2);
 end
+if memory == 1
+    mu_mem(k)      = mean(Xi_mem(k,:));
+    rmse_mem(run)  = (1 / (T/dt)) * sum ( (X - mu_mem).^2);
+end
+if zm_mem == 1
+    mu_zm_mem(k)      = mean(Xi_zm_mem(k,:));
+    rmse_zm_mem(run)  = (1 / (T/dt)) * sum ( (X - mu_zm_mem).^2);
+end
 if const == 1
     mu_const(k)     = mean(Xi_const(k,:));
     rmse_const(run) = (1 / (T/dt)) * sum ( (X - mu_const).^2);
@@ -483,6 +560,14 @@ if diag_output == 1
     end
     if zero_mean == 1
         plot(0:dt:(k-1)*dt, mu_zm(1:k),'b--','DisplayName','RKHS(ZM)');
+        hold on;
+    end
+    if memory == 1
+        plot(0:dt:(k-1)*dt, mu_mem(1:k),'g--','DisplayName','RKHS memory');
+        hold on;
+    end
+    if zm_mem == 1
+        plot(0:dt:(k-1)*dt, mu_zm_mem(1:k),'Color',[0.2,0.3,0.7],'LineStyle','--','DisplayName','RKHS ZM + memory');
         hold on;
     end
     if const == 1
@@ -524,7 +609,7 @@ if diag_main == 1
         title('Effective particle size N_{eff} in SIS PF');
     end
     
-  end
+ end
 end
 
 % Overall rmse 
@@ -548,6 +633,14 @@ end
 if zero_mean == 1
     rmse_tot_zm = (1 / No_runs) * sum( rmse_zm );
     sprintf('RMSE for RKHS(ZM) method - %0.5g', rmse_tot_zm)
+end
+if memory == 1
+    rmse_tot_mem = (1 / No_runs) * sum( rmse_mem );
+    sprintf('RMSE for RKHS memory method - %0.5g', rmse_tot_mem)
+end
+if zm_mem == 1
+    rmse_tot_zm_mem = (1 / No_runs) * sum( rmse_zm_mem );
+    sprintf('RMSE for RKHS ZM + memory method - %0.5g', rmse_tot_zm_mem)
 end
 if const == 1
     rmse_tot_const = (1 / No_runs) * sum( rmse_const);

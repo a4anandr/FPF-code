@@ -1,4 +1,4 @@
-function [beta_m K] = gain_rkhs( Xi , c , kernel, lambda, epsilon, alpha, K_prev, diag)
+function [beta_m K] = gain_rkhs_memory( Xi , c , kernel, lambda, epsilon, alpha, K_prev, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
 % tic;
 N = length(Xi);

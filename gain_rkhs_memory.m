@@ -1,4 +1,4 @@
-function [beta_m K] = gain_rkhs_memory( Xi , h , d, kernel, lambda, epsilon, alpha, K_prev, diag)
+function [beta K] = gain_rkhs_memory( Xi , h , d, kernel, lambda, epsilon, alpha, K_prev, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
 % tic;
 N = length(Xi);
@@ -26,18 +26,25 @@ Ker_x_sum = zeros(N,N);
 for d_i = 1 : d
     Ker_x_sum         =  Ker_x_sum + Ker_x(:,:,d_i)'* Ker_x(:,:,d_i);
 end
-b_m     = (1/N) * ( Ker * Y' -  Ker_x' * K_prev');           % (1/N) * ( Ker * Y' + alpha * Ker_x' * K_prev')
-M_m     = lambda * Ker + ((1 + alpha)/ N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
-beta_m  = M_m \ b_m;
+b     = (1/N) * ( Ker * Y' -  Ker_x' * K_prev');           % (1/N) * ( Ker * Y' + alpha * Ker_x' * K_prev')
+% b       = (1/N) * ( Ker * Y' -  Ker_x * K_prev');
+M     = lambda * Ker + ((1 + alpha)/ N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
+beta  = M \ b;
 
-for i = 1: 1 : N
-     K(i,:)     = zeros(1,d);
-     for k = 1 : 1 : N
-         for d_i = 1 : d
-             K(i,d_i)      = K(i,d_i)     + beta_m(k)  * Ker_x(i,k,d_i);      % Ker_x(pj,pi)
-         end   
-     end
-end
+% for i = 1: 1 : N
+%      K(i,:)     = zeros(1,d);
+%      for k = 1 : 1 : N
+%          for d_i = 1 : d
+%              K(i,d_i)      = K(i,d_i)     + beta_m(k)  * Ker_x(i,k,d_i);      % Ker_x(pj,pi)
+%          end   
+%      end
+% end
+
+for d_i = 1 : d
+    K(:,d_i)      = beta'  * Ker_x(:,:,d_i)';      % Ker_x(pj,pi)
+end  
+
+
 
 if diag == 1
     figure(100);

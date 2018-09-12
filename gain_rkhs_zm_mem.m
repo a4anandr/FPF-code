@@ -36,16 +36,21 @@ b(1 : N, :)        =  (2/N) * Ker * Y'- (2/N) * ( Ker_x_ones * K_hat' + Ker_x' *
 b(N+1 : N+d, :)    =  zeros(d,1);    
 M(1 : N, 1 : N)    =  2 * lambda * Ker + ( 2 * (1 + alpha) / N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
 beta               =  M \ b;
- 
-        
- for i = 1: 1 : N
-     K(i,:)     = K_hat;
-     for k = 1 : 1 : N
-         for d_i = 1 : d
-             K(i,d_i)      = K(i,d_i)     + beta(k)  * Ker_x(i,k,d_i);      % Ker_x(pj,pi)
-         end   
-     end
- end
+       
+%  for i = 1: 1 : N
+%      K(i,:)     = K_hat;
+%      for k = 1 : 1 : N
+%          for d_i = 1 : d
+%              K(i,d_i)      = K(i,d_i)     + beta(k)  * Ker_x(i,k,d_i);      % Ker_x(pj,pi)
+%          end   
+%      end
+%  end
+
+for d_i = 1 : d
+    K(:,d_i)      = beta(1:N)'  * Ker_x(:,:,d_i)';     
+end 
+K = repmat(K_hat,N,1)  + K;
+
 
 end
 

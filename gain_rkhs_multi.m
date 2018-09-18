@@ -1,23 +1,35 @@
 function [eta K] = gain_rkhs_multi( Xi , h , d, kernel, lambda, epsilon, diag)
 % Returns the gain computed at particle locations Xi using an RKHS 
-% tic;
 N = length(Xi);
+v = version('-release');
 
 % Evaluation of kernel matrices 
 eta = 0;
 if kernel == 0  % Gaussian
-   for i = 1:N
-       eta  = eta + (1/N) * h(Xi(i,:));
-       for k = 1:N          
-           Ker(i,k) =  exp(-(norm(Xi(i,:) - Xi(k,:)).^2/(4 * epsilon)));  
-           for d_i = 1 : d
-               Ker_x(i,k,d_i) =  -((Xi(i,d_i) - Xi(k,d_i)) / (2 * epsilon)) .* Ker(i,k);   % Derivative of Ker with respect to the first variable
+    if v == '2018a'
+        for i = 1:N
+            eta  = eta + (1/N) * h(Xi(i,:));
+        end
+        for k = 1:N
+            Ker(:,k) = exp(- vecnorm(Xi - repmat(Xi(k,:),N,1),2,2).^2/( 4 * epsilon));
+            for d_i = 1 : d
+                Ker_x(:,k,d_i) =  -((Xi(:,d_i) - Xi(k,d_i))./ (2 * epsilon)) .* Ker(:,k);   % Derivative of Ker with respect to the first variable
+            end
+        end
+    else
+        for i = 1:N
+            eta  = eta + (1/N) * h(Xi(i,:));
+            for k = 1:N          
+                Ker(i,k) =  exp(-(norm(Xi(i,:) - Xi(k,:)).^2/(4 * epsilon)));  
+                for d_i = 1 : d
+                    Ker_x(i,k,d_i) =  -((Xi(i,d_i) - Xi(k,d_i)) / (2 * epsilon)) .* Ker(i,k);   % Derivative of Ker with respect to the first variable
                % If we fix the second variable and run through all values
                % of i, then we get the derivative of Ker with respect to
                % the first variable.
-           end
-       end
-   end
+                end
+            end
+        end
+    end
 end
 
 for i = 1:N

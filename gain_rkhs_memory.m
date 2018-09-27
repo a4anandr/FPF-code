@@ -38,11 +38,13 @@ for i = 1:N
 end
 
 % b used in simplified algorithm - searching on a smaller subspace of the Hilbert space H
-Ker_x_sum = zeros(N,N);
+Ker_x_sum    = zeros(N,N);
+Ker_prev_sum = zeros(N,1);
 for d_i = 1 : d
     Ker_x_sum         =  Ker_x_sum + Ker_x(:,:,d_i)'* Ker_x(:,:,d_i);
+    Ker_prev_sum      =  Ker_prev_sum + Ker_x(:,:,d_i)' * K_prev1(:,d_i);
 end
-b   = (1/N) * ( Ker * Y' -  Ker_x' * K_prev');      % Regularization in \clH norm with \tilg gives this         
+b   = (1/N) * ( Ker * Y' - Ker_prev_sum);      % Regularization in \clH norm with \tilg gives this         
 % b     = (1/N) * ( Ker * Y' + alpha * Ker_x' * K_prev');  % Regularization
 % in \clH norm with just g gives this
 % b   = (1/N) * ( Ker * Y' -  Ker_x * K_prev');     % Just for

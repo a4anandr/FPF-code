@@ -1,7 +1,6 @@
 function [Phi K] = gain_coif(Xi, c, epsilon, Phi,N_ker, diag)
 % Returns the gain computed at particle locations Xi using the Coifman
 % kernel based method.
-tic
 N = length(Xi);
 T = zeros(N_ker);
 max_diff = 1;
@@ -39,7 +38,6 @@ end
 % Xi_delta  = [ Xi_f(k-1,1)-0.01 ; Xi_f(k-1,1:end-1)']; 
 % grad_Phi_approx = (Phi(:,end) - Phi_delta)./(Xi_f(k-1,:)' - Xi_delta);
 
-toc
 
 %% For displaying figures
 if diag == 1

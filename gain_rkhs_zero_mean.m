@@ -51,7 +51,7 @@ for d_i = 1 : d
 end
 b(1 : N, :)        =  (2/N) * Ker * Y'- (2/N) * Ker_x_ones * K_hat';
 b(N+1 : N+d, :)    =  zeros(d,1);    
-M(1 : N, 1 : N)    =  2 * lambda * Ker + ( 2 / N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works
+M(1 : N, 1 : N)    =  2 * lambda * Ker + ( 2 / N) * Ker_x_sum;       % Ker_x * Ker_x' = Ker_x' * Ker_x - Hence either one works 
 beta               =  M \ b;
  
 %  tic;      

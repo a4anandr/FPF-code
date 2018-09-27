@@ -8,7 +8,7 @@ eta = 0;
 % eta = mean(c(Xi));
 step = 0.01;
 xmax = max(mu) + 10;
-if xmax > 100
+if max(abs(mu)) > 100
     K = zeros(N,1);
     return;
 end

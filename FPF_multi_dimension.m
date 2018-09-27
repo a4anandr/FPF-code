@@ -28,11 +28,12 @@ No_runs = 1;   % Total number of runs to compute the rmse metric for each of the
 
 %% Flags to be set to choose which methods to compare
 coif  = 0;           % Computes gain using Coifman kernel method
-rkhs  = 0;           % Computes gain using RKHS
+rkhs  = 1;           % Computes gain using RKHS
 zero_mean = 1;       % Computes gain using RKHS that takes into account the constant gain approximation values
+zm_mem = 1;          % Computes gain using const gain approx and a memory parameter for previous gain
 const = 1;           % Computes the constant gain approximation
-sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
-kalman = 1;          % Runs Kalman Filter for comparison
+sis    = 0;          % Runs Sequential Importance Sampling Particle Filter 
+kalman = 0;          % Runs Kalman Filter for comparison
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -66,6 +67,7 @@ R     = 1;                 % theta^2, Observation noise covariance
 X_0  = [ 0.5 -0.5];
 % Sig = 10 * eye(2);                 % 10 * eye(2) in the paper
 Sig = [5 0; 0 5];
+% Sig = [1 0; 0 1];
 
 %% Filter parameters
 
@@ -96,18 +98,31 @@ if zero_mean == 1
    kernel    = 0;           % 0 for Gaussian kernel
    lambda_zm = 1e-1;        % 1e-1 has worked best so far for Sig = [5 0 ; 0 5]
    eps_zm    = 2;           % Variance parameter of the kernel  - 2 has worked best so far for the same Sig
-   K_zm   = ones(1,N,d);    % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+   K_zm      = zeros(1,N,d);    % Initializing the gain to a 1 vector, this value is used only at k = 1. 
    
    lose_zm = 0;             % Initializing the "lose the track" count as specified in Budhiraja et al.
 
 end
 
-%% iv) Constant gain approximation
+%% iv) RKHS ZM with memory
+if zm_mem == 1
+   kernel          = 0;          % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel
+   lambda_zm_mem   = 1e-1;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   eps_zm_mem      = 2;          % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
+   lambda_gain_zm_mem = 1;       % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
+   K_zm_mem        = zeros(1,N,d); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
+   beta_zm_mem     = zeros(N,1); % Initializing the parameter values beta to zero.
+   
+   lose_zm_mem     = 0 ;         % Initializing the "lose the track" count as specified in Budhiraja et al.
+
+end
+
+%% v) Constant gain approximation
 if const == 1
     lose_const = 0;        % Initializing the "lose the track" count as specified in Budhiraja et al.
 end
 
-%% v) SIS PF
+%% vi) SIS PF
 if sis == 1 
     resampling = 0;        % Whether you need deterministic resampling 
     lag        = 3;        % After how many time samples should periodic resampling be done
@@ -115,7 +130,7 @@ if sis == 1
     lose_sis = 0;          % Initializing the "lose the track" count as specified in Budhiraja et al.
 end
 
-%% vi) Extended Kalman Filter
+%% vii) Extended Kalman Filter
 % Declaring symbolic functions and derivatives to be used in EKF
 if kalman == 1
    syms y z;
@@ -179,12 +194,17 @@ for run = 1: 1 : No_runs
         first_zm     = 0;
     end
     
+    if zm_mem == 1
+        Xi_zm_mem        = Xi_0;
+        first_zm_mem     = 0;
+    end
+    
     if const == 1
         Xi_const     = Xi_0;
         first_const  = 0;
     end
     
-%  iv) Sequential Importance Sampling Particle Filter Initialization
+%  vi) Sequential Importance Sampling Particle Filter Initialization
     if sis == 1
        Xi_sis       = Xi_0;
        Wi_sis(:,1)  = (1/N) * ones(1,N);          % Initializing all weights to equal value.
@@ -194,7 +214,7 @@ for run = 1: 1 : No_runs
        first_sis     = 0;
     end
 
-% v) Extended Kalman filter - Initialization
+% vii) Extended Kalman filter - Initialization
     if kalman == 1
        X_kal        = mean(Xi_0);     % Initializing the Kalman filter state estimate to the mean at t = 0, More accurate initialization is X_0.
        P(:,:,1)     = Sig;            % Initializing the state covariance for the Kalman filter 
@@ -245,6 +265,24 @@ for k = 2: 1: (T/delta)
         K_const_zm(k,:)= mean(K_zm(k,:,:),2);
     end
     
+    if zm_mem == 1
+            if k == 2
+                [h_hat_zm_mem(k-1), beta_zm_mem, K_zm_mem(k,:,:)] = gain_rkhs_zm_mem(Xi_zm_mem(:,:,k-1) , h_x, d , kernel,lambda_zm_mem, eps_zm_mem, 0, K_zm_mem(k-1,:,:), beta_zm_mem, zeros(N,d), diag_fn);
+            else
+                [h_hat_zm_mem(k-1), beta_zm_mem, K_zm_mem(k,:,:)] = gain_rkhs_zm_mem(Xi_zm_mem(:,:,k-1) , h_x, d , kernel,lambda_zm_mem, eps_zm_mem, lambda_gain_zm_mem, K_zm_mem(k-1,:,:), beta_zm_mem, Xi_zm_mem(:,:,k-2),diag_fn);
+            end        
+            mu_zm_mem(k-1,:)   = mean(Xi_zm_mem(:,:,k-1));
+        if (norm(mu_zm_mem(k-1,:) - X(k-1,:)) > tol && first_zm_mem == 0)
+            lose_zm_mem  = lose_zm_mem + 1;
+            first_zm_mem = first_zm_mem + 1;
+        end
+        K_const_zm_mem(k,:)= mean(K_zm_mem(k,:,:),2);
+    end
+    
+    % max(abs(K_zm(k,:,:) - K_zm_mem(k,:,:)))
+    % K_const_zm_mem
+    % K_hat_zm_mem
+    
     if const == 1   
         [h_hat_const(k-1) K_const(k,:)] = gain_const_multi(Xi_const(:,:,k-1), h_x, d, diag_fn);
         mu_const(k-1,:)   = mean(Xi_const(:,:,k-1));
@@ -293,14 +331,23 @@ for k = 2: 1: (T/delta)
            Xi_zm(i,2,k)   = Xi_zm(i,2,k-1) + Xi_zm(i,1,k-1) * delta + f2_x(Xi_zm(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_zm(k,i,2)/R) * dI_zm(k);
        end
        
-       % iv) Constant gain approximation 
+       % iv) RKHS zero mean with memory
+       if zm_mem == 1
+           dI_zm_mem(k)     = Z(k-1) - 0.5 * (h_x(Xi_zm_mem(i,:,k-1)) + h_hat_zm_mem(k-1));
+           K_zm_mem(k,i,1)  = min(max(K_zm_mem(k,i,1),K_min),K_max);
+           K_zm_mem(k,i,2)  = min(max(K_zm_mem(k,i,2),K_min),K_max);
+           Xi_zm_mem(i,1,k) = Xi_zm_mem(i,1,k-1) - Xi_zm_mem(i,2,k-1) * delta + f1_x(Xi_zm_mem(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_zm_mem(k,i,1)/R) * dI_zm_mem(k);       % K_rkhs(k,i,1) * dI_rkhs(k)
+           Xi_zm_mem(i,2,k) = Xi_zm_mem(i,2,k-1) + Xi_zm_mem(i,1,k-1) * delta + f2_x(Xi_zm_mem(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_zm_mem(k,i,2)/R) * dI_zm_mem(k);
+       end
+       
+       % v) Constant gain approximation 
        if const == 1
            dI_const(k)      = Z(k-1) - 0.5 * (h_x(Xi_const(i,:,k-1)) + h_hat_const(k-1));          
            Xi_const(i,1,k)  = Xi_const(i,1,k-1) - Xi_const(i,2,k-1) * delta + f1_x(Xi_const(i,:,k-1)) * delta + e1 * sdt * common_rand(1) + (K_const(k,1)/R) * dI_const(k);    % (1/theta^2) is actually required?
            Xi_const(i,2,k)  = Xi_const(i,2,k-1) + Xi_const(i,1,k-1) * delta + f2_x(Xi_const(i,:,k-1)) * delta + e2 * sdt * common_rand(2) + (K_const(k,2)/R) * dI_const(k);
        end
        
-       % v) Sequential Importance Sampling Particle Filter (SIS PF)
+       % vi) Sequential Importance Sampling Particle Filter (SIS PF)
        if sis == 1
           Xi_sis(i,1,k)     = Xi_sis(i,1,k-1) - Xi_sis(i,2,k-1) * delta  +  f1_x(Xi_sis(i,:,k-1)) * delta + e1 * sdt * common_rand(1); 
           Xi_sis(i,2,k)     = Xi_sis(i,2,k-1) + Xi_sis(i,1,k-1) * delta  +  f2_x(Xi_sis(i,:,k-1)) * delta + e2 * sdt * common_rand(2); 
@@ -404,6 +451,11 @@ if zero_mean == 1
     rmse_zm(run)       = mean(vecnorm(X - mu_zm,2,2));
     max_diff_zm(run)   = max(vecnorm(X - mu_zm,2,2)); 
 end
+if zm_mem == 1
+    mu_zm_mem(k,:)       = mean(Xi_zm_mem(:,:,k));
+    rmse_zm_mem(run)     = mean(vecnorm(X - mu_zm_mem,2,2));
+    max_diff_zm_mem(run) = max(vecnorm(X - mu_zm_mem,2,2)); 
+end
 if const == 1
     mu_const(k,:)      = mean(Xi_const(:,:,k));
     rmse_const(run)    = mean(vecnorm(X - mu_const,2,2));
@@ -429,27 +481,31 @@ if (diag_output == 1 && No_runs == 1)
     yunit = rho * sin(th);
     plot(xunit, yunit,'r--','DisplayName','|x| < \rho');
     if coif == 1
-        plot(mu_coif(1:k,1), mu_coif(1:k,2),'c-o','linewidth',2.0,'DisplayName','FPF - Coifman');
+        plot(mu_coif(1:k,1), mu_coif(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - Coifman');
         hold on;
     end
     if rkhs == 1
-        plot(mu_rkhs(1:k,1), mu_rkhs(1:k,2),'k-x','linewidth',2.0,'DisplayName','FPF - RKHS');
+        plot(mu_rkhs(1:k,1), mu_rkhs(1:k,2),'k--','linewidth',2.0,'DisplayName','FPF - RKHS');
         hold on;
     end
     if zero_mean == 1
-        plot(mu_zm(1:k,1), mu_zm(1:k,2),'b-x','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        plot(mu_zm(1:k,1), mu_zm(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        hold on;
+    end
+    if zm_mem == 1
+        plot(mu_zm_mem(1:k,1), mu_zm_mem(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - RKHS ZM + memory');
         hold on;
     end
     if const == 1
-        plot(mu_const(1:k,1), mu_const(1:k,2),'r-s','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(mu_const(1:k,1), mu_const(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if kalman == 1
-        plot(X_kal(1:k,1), X_kal(1:k,2),'g-^','linewidth',2.0,'DisplayName','EKF');
+        plot(X_kal(1:k,1), X_kal(1:k,2),'g--','linewidth',2.0,'DisplayName','EKF');
         hold on;
     end
     if sis == 1
-        plot(mu_sis(1:k,1), mu_sis(1:k,2),'m-d','linewidth',2.0,'DisplayName','SIS PF');
+        plot(mu_sis(1:k,1), mu_sis(1:k,2),'m--','linewidth',2.0,'DisplayName','SIS PF');
         hold on;
     end
     legend('show');
@@ -467,6 +523,10 @@ if (diag_output == 1 && No_runs == 1)
     end
     if zero_mean == 1
         plot(0:delta:(k-1)*delta, mu_zm(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        hold on;
+    end
+    if zm_mem == 1
+        plot(0:delta:(k-1)*delta, mu_zm_mem(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - RKHS ZM + memory');
         hold on;
     end
     if const == 1
@@ -495,11 +555,16 @@ if (diag_output == 1 && No_runs == 1)
         hold on;
     end
     if zero_mean == 1
-        plot(0:delta:(k-1)*delta, mu_zm(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - RKHS(ZM)');
+        plot(0:delta:(k-1)*delta, mu_zm(1:k,2),'b--','linewidth',2.0,'DisplayName','FPF - RKHS-OM)');
         hold on;
     end
+    if zm_mem == 1
+        plot(0:delta:(k-1)*delta, mu_zm_mem(1:k,2),'r--','linewidth',2.0,'DisplayName','FPF - RKHS-OM + memory');
+        hold on;
+    end
+    
     if const == 1
-        plot(0:delta:(k-1)*delta, mu_const(1:k,2),'r--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(0:delta:(k-1)*delta, mu_const(1:k,2),'c--','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if kalman == 1
@@ -553,6 +618,13 @@ if zero_mean == 1
     sprintf('RMSE for RKHS (ZM) method - %0.5g', rmse_tot_zm)
     sprintf(['Lost track ' num2str(lose_zm) ' times'])
     sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_zm))])
+end
+if zm_mem == 1
+    rmse_tot_zm_mem = mean(rmse_zm_mem, 'omitnan' );
+    sprintf('---------------- RKHS (ZM) ---------------')
+    sprintf('RMSE for RKHS ZM + memory method - %0.5g', rmse_tot_zm_mem)
+    sprintf(['Lost track ' num2str(lose_zm_mem) ' times'])
+    sprintf(['Maximum deviation from true state - ' num2str(max(max_diff_zm_mem))])
 end
 if const == 1
     rmse_tot_const = mean(rmse_const , 'omitnan');

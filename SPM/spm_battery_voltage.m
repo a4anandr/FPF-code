@@ -1,7 +1,7 @@
 function [cell_voltage_spm] = spm_battery_voltage(X,U,param)
 % normalised_q_3states_spm_battery_voltage  - computes the output voltage
 % using the normalised state vector, SPM parameters and load current as it's input
-% X(1) = qbar_pos; X(2) = qbar_neg; X(3) = csbar_pos X(4) = ce_bar
+% X(1) = qbar_pos; X(2) = qbar_neg; X(3) = csbar_neg 
 % U = I_load; (load current in amps)
 % U > 0 -> discharge, U < 0 -> charge
 
@@ -42,9 +42,9 @@ j_n       =  I_density/(F*a_n*len_n);
 
 %% Calculatons common to overpotential & OCP components of output voltage
 % cs_surf_pos = cs_avg_c*X(3) + (8*R_p/35)*qc*X(1) - (R_p./(35*D_p)).*j_p; % surface concentration % surface concentration of the single pos electrode particle using the computed state-variable solution (csbar_avg)
-cs_surf_pos = X(1) - (R_p./(5*D_p)).*j_p; % surface concentration % surface concentration of the single pos electrode particle using the computed state-variable solution (csbar_avg)
-cs_avg_neg = cs_max_n*(theta_min_neg + (( X(1) - theta_min_pos*cs_max_p)./((theta_max_pos - theta_min_pos)*cs_max_p))*(theta_max_neg - theta_min_neg));  % average concentration in neg electrodue (analytical expn using conservation of charge/mass)
-cs_surf_neg = cs_avg_neg  - (R_n./(5*D_n)).*j_n; % surface concentration of the single neg electrode particle
+cs_avg_pos  = cs_max_p*(theta_min_pos + (( X(3) - theta_min_neg*cs_max_n)./((theta_max_neg - theta_min_neg)*cs_max_n))*(theta_max_pos - theta_min_pos));  % average concentration in neg electrodue (analytical expn using conservation of charge/mass)
+cs_surf_pos = cs_avg_pos + (8*R_p*X(1)/35) + (R_p./(35*D_p)).*j_p; % surface concentration % surface concentration of the single pos electrode particle using the computed state-variable solution (csbar_avg)
+cs_surf_neg = X(3) + (8*R_n*X(2)/35) - (R_n./(35*D_n)).*j_n; % surface concentration of the single neg electrode particle
 
 %% Compute overpotentials (without electrolyte dynamics) in both electrodes (1st component of output voltage)
 eta_p = (2*R*T/F)*asinh(-I_density./(2*F*a_p*len_p*k_p*sqrt(ce_init*cs_surf_pos.*(cs_max_p - cs_surf_pos))));

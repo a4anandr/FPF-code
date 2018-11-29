@@ -1,5 +1,5 @@
 function dXbar_dt = normalised_spm_state_eqn(X,U,param)
-% X(1) = qbar_pos, X(2) = qbar_neg, X(3) = csbar_pos  X(4) = ce_bar
+% X(1) = qbar_pos, X(2) = qbar_neg, X(3) = csbar_neg
 % U = I_load (input current in amps)
 
 A        = param.A;
@@ -31,7 +31,9 @@ j_p       = -I_density/(F*a_p*len_p);
 j_n       =  I_density/(F*a_n*len_n);
 
 %% RHS of state eqn (i.e. the state derivatives w.r.t time)
-dcsbar_dt_pos = -3*j_p/R_p; % csbar_pos
-dXbar_dt      = [dcsbar_dt_pos];
+dqbar_dt_pos = (-30 * (D_p/R_p^2))*X(1) + (45/2)*(-j_p/R_p^2); 
+dqbar_dt_neg = (-30 * (D_n/R_n^2))*X(2) + (45/2)*(-j_n/R_n^2); 
+dcsbar_dt_neg = -3*j_n/R_n; % csbar_pos
+dXbar_dt      = [dqbar_dt_pos; dqbar_dt_neg; dcsbar_dt_neg];
 
 end

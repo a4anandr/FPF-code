@@ -42,7 +42,7 @@ T     = 1300;  % Total running time, using the same value in references [1],[2]
 delta = 1;     % Time increments for the SDE and observation model 
 sdt   = sqrt(delta); 
 
-d     = 1;        % State space dimension
+d     = 3;        % State space dimension
 
 % Process noise parameters
 e1 = 0;
@@ -51,8 +51,8 @@ e1 = 0;
 theta = 1e-2;                % Standard deviation parameter in observation process
 
 %% Parameters of the prior p(0) - Multivariate Gaussian density 
-X_0 = [param_spm.cs_p_init];    % initial value of the state vector
-Sig = 10;                     % initial state covariance ( 1e-2 (mol/m^3)^2)
+X_0 = [0 0 param_spm.cs_p_init];    % initial value of the state vector
+Sig = 10000 * eye(3);               % initial state covariance ( 1e-2 (mol/m^3)^2)
 
 %% Filter parameters
 N = 500;       % No of particles - Common for all Monte Carlo methods used
@@ -98,7 +98,7 @@ for k = 2: 1: (T/delta)
     t_span           = (k-2)*delta : delta : (k-1)*delta;
     I_load           =  interp1(C_rate_profile(:,1),C_rate_profile(:,2),(k-2)*delta,'previous','extrap')*I_1C;
     [~,X_t_matrix]   =  ode45(@(t,x)normalised_spm_state_eqn(X(k-1,:),I_load,param_spm), t_span, X(k-1,:));
-    X(k,1)           =  X_t_matrix(end,:) + e1 * sdt * randn;   % need to check dimensions
+    X(k,:)           =  X_t_matrix(end,:) + e1 * sdt * randn;   % need to check dimensions
     Z(k)             =  spm_battery_voltage(X(k,:),I_load,param_spm)  + theta * randn; 
     Z_true(k)        =  spm_battery_voltage(X(k,:),I_load,param_spm);
      
@@ -107,9 +107,9 @@ for k = 2: 1: (T/delta)
     if const == 1
         mu_const(k-1,:)   = mean(Xi_const(:,:,k-1));
         h_hat_const(k-1)  = mean(Zi_const(:,k-1));
-        K_const(k) = zeros(1,d);
+        K_const(k,:) = zeros(1,d);
         for i = 1: N
-            K_const(k) = K_const(k) + (1/N) * ((spm_battery_voltage(Xi_const(i,:,k-1),I_load,param_spm) - h_hat_const(k-1)) .* Xi_const(i,:,k-1));
+            K_const(k,:) = K_const(k,:) + (1/N) * ((spm_battery_voltage(Xi_const(i,:,k-1),I_load,param_spm) - h_hat_const(k-1)) .* Xi_const(i,:,k-1));
         end
     end
 % ii) SIS - PF    
@@ -119,13 +119,13 @@ for k = 2: 1: (T/delta)
     end
         
     for i = 1:N
-       common_rand = randn(d,1);
+       common_rand = randn(1,d);
        
        % i) FPF - const gain approx 
        if const == 1
            dI_const(k)     = Z(k-1) - 0.5 * ( Zi_const(i,k-1) + h_hat_const(k-1));          
            [~,X_t_matrix]  = ode45(@(t,x)normalised_spm_state_eqn(Xi_sis(i,:,k-1),I_load,param_spm), t_span, Xi_sis(i,:,k-1));
-           Xi_const(i,:,k) = X_t_matrix(end,:) +  e1 * sdt * common_rand + K_const(k) * dI_const(k);   % need to check dimensions
+           Xi_const(i,:,k) = X_t_matrix(end,:) +  e1 * sdt * common_rand + K_const(k,:) * dI_const(k);   % need to check dimensions
            Zi_const(i,k)   = spm_battery_voltage(Xi_const(i,:,k),I_load,param_spm);
        end
        
@@ -193,14 +193,14 @@ end
 %% Plotting the state trajectory and estimates
 if (diag_output == 1 && No_runs == 1)   
     figure;
-    plot(0:delta:(k-1)*delta, X(1:k,1),'DisplayName','True state');
+    plot(0:delta:(k-1)*delta, X(1:k,3),'DisplayName','True state');
     hold on;
     if const == 1
-        plot(0:delta:(k-1)*delta, mu_const(1:k,1),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
+        plot(0:delta:(k-1)*delta, mu_const(1:k,3),'b--','linewidth',2.0,'DisplayName','FPF - Const gain');
         hold on;
     end
     if sis == 1
-        plot(0:delta:(k-1)*delta, mu_sis(1:k,1),'m--','linewidth',2.0,'DisplayName','SIS PF');
+        plot(0:delta:(k-1)*delta, mu_sis(1:k,3),'m--','linewidth',2.0,'DisplayName','SIS PF');
         hold on;
     end
     legend('show');

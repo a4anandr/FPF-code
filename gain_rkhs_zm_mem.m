@@ -23,6 +23,7 @@ if kernel == 0  % Gaussian
             eta  = eta + (1/N) * h(Xi(i,:));
             for k = 1:N          
                 Ker(i,k) =  exp(-(norm(Xi(i,:) - Xi(k,:)).^2/(4 * epsilon)));  
+                Ker_prev(:,k) = exp(- norm(Xi -  Xi_prev(k,:)).^2/( 4 * epsilon));
                 for d_i = 1 : d
                     Ker_x(i,k,d_i) =  -((Xi(i,d_i) - Xi(k,d_i)) / (2 * epsilon)) .* Ker(i,k);   % Derivative of Ker with respect to the first variable
                % If we fix the second variable and run through all values

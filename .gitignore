@@ -4,5 +4,7 @@ Figures/
 *.fig
 *.jpg
 *.pdf
+*.pkl
+
 Figures_multi/
 desktop.ini

@@ -30,10 +30,10 @@ No_runs = 1;   % Total number of runs to compute the rmse metric for each of the
 coif  = 0;           % Computes gain using Coifman kernel method
 rkhs  = 1;           % Computes gain using RKHS
 zero_mean = 1;       % Computes gain using RKHS that takes into account the constant gain approximation values
-zm_mem = 1;          % Computes gain using const gain approx and a memory parameter for previous gain
+zm_mem = 0;          % Computes gain using const gain approx and a memory parameter for previous gain
 const = 1;           % Computes the constant gain approximation
-sis    = 0;          % Runs Sequential Importance Sampling Particle Filter 
-kalman = 0;          % Runs Kalman Filter for comparison
+sis    = 1;          % Runs Sequential Importance Sampling Particle Filter 
+kalman = 1;          % Runs Kalman Filter for comparison
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
@@ -66,7 +66,7 @@ R     = 1;                 % theta^2, Observation noise covariance
 %% Parameters of the prior p(0) - Multivariate Gaussian density 
 X_0  = [ 0.5 -0.5];
 % Sig = 10 * eye(2);                 % 10 * eye(2) in the paper
-Sig = [5 0; 0 5];
+Sig = [1 0; 0 1];
 % Sig = [1 0; 0 1];
 
 %% Filter parameters
@@ -112,9 +112,7 @@ if zm_mem == 1
    lambda_gain_zm_mem = 1;       % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_zm_mem        = zeros(1,N,d); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
    beta_zm_mem     = zeros(N,1); % Initializing the parameter values beta to zero.
-   
    lose_zm_mem     = 0 ;         % Initializing the "lose the track" count as specified in Budhiraja et al.
-
 end
 
 %% v) Constant gain approximation
@@ -224,7 +222,7 @@ for run = 1: 1 : No_runs
     end
 
 for k = 2: 1: (T/delta)    
-    % k  
+    k  
     %% Actual state - observation process evolution
     X(k,1)   = X(k-1,1) - X(k-1,2) * delta +   f1_x(X(k-1,:)) * delta + e1 * sdt * randn;        
     X(k,2)   = X(k-1,2) + X(k-1,1) * delta +   f2_x(X(k-1,:)) * delta + e2 * sdt * randn;
@@ -438,37 +436,72 @@ end
 
 if coif == 1
     mu_coif(k,:)       = mean(Xi_coif(k,:));
-    rmse_coif(run)     = mean(vecnorm(X - mu_coif,2,2));                                            % (1 / (T/delta)) * (sum(sqrt(sum((X - mu_coif).^2,2))));
-    max_diff_coif(run) = max(vecnorm(X - mu_coif,2,2)); 
+    if version('-release') == '2018a'
+        rmse_coif(run)     = mean(vecnorm(X - mu_coif,2,2));                                            % (1 / (T/delta)) * (sum(sqrt(sum((X - mu_coif).^2,2))));
+        max_diff_coif(run) = max(vecnorm(X - mu_coif,2,2)); 
+    else
+        rmse_coif(run)     = mean(sqrt((X(:,1) - mu_coif(:,1)).^2 + (X(:,2) - mu_coif(:,2)).^2));
+        max_diff_coif(run) = max(sqrt((X(:,1) - mu_coif(:,1)).^2 + (X(:,2) - mu_coif(:,2)).^2));
+    end
 end
 if rkhs == 1
     mu_rkhs(k,:)       = mean(Xi_rkhs(:,:,k));
-    rmse_rkhs(run)     = mean(vecnorm(X - mu_rkhs,2,2)); 
-    max_diff_rkhs(run) = max(vecnorm(X - mu_rkhs,2,2)); 
+    if version('-release') == '2018a'
+        rmse_rkhs(run)     = mean(vecnorm(X - mu_rkhs,2,2)); 
+        max_diff_rkhs(run) = max(vecnorm(X - mu_rkhs,2,2)); 
+    else
+        rmse_rkhs(run)     = mean(sqrt((X(:,1) - mu_rkhs(:,1)).^2 + (X(:,2) - mu_rkhs(:,2)).^2));
+        max_diff_rkhs(run) = max(sqrt((X(:,1) - mu_rkhs(:,1)).^2 + (X(:,2) - mu_rkhs(:,2)).^2));
+    end
 end
 if zero_mean == 1
     mu_zm(k,:)         = mean(Xi_zm(:,:,k));
-    rmse_zm(run)       = mean(vecnorm(X - mu_zm,2,2));
-    max_diff_zm(run)   = max(vecnorm(X - mu_zm,2,2)); 
+    if version('-release') == '2018a'
+        rmse_zm(run)       = mean(vecnorm(X - mu_zm,2,2));
+        max_diff_zm(run)   = max(vecnorm(X - mu_zm,2,2)); 
+    else
+        rmse_zm(run)     = mean(sqrt((X(:,1) - mu_zm(:,1)).^2 + (X(:,2) - mu_zm(:,2)).^2));
+        max_diff_zm(run) = max(sqrt((X(:,1) - mu_zm(:,1)).^2 + (X(:,2) - mu_zm(:,2)).^2));
+    end
 end
 if zm_mem == 1
     mu_zm_mem(k,:)       = mean(Xi_zm_mem(:,:,k));
-    rmse_zm_mem(run)     = mean(vecnorm(X - mu_zm_mem,2,2));
-    max_diff_zm_mem(run) = max(vecnorm(X - mu_zm_mem,2,2)); 
+    if version('-release') == '2018a'
+       rmse_zm_mem(run)     = mean(vecnorm(X - mu_zm_mem,2,2));
+       max_diff_zm_mem(run) = max(vecnorm(X - mu_zm_mem,2,2)); 
+    else
+       rmse_zm_mem(run)     = mean(sqrt((X(:,1) - mu_zm_mem(:,1)).^2 + (X(:,2) - mu_zm_mem(:,2)).^2));
+       max_diff_zm_mem(run) = max(sqrt((X(:,1) - mu_zm_mem(:,1)).^2 + (X(:,2) - mu_zm_mem(:,2)).^2));
+    end
 end
 if const == 1
     mu_const(k,:)      = mean(Xi_const(:,:,k));
-    rmse_const(run)    = mean(vecnorm(X - mu_const,2,2));
-    max_diff_const(run)= max(vecnorm(X - mu_const,2,2)); 
+    if version('-release') == '2018a'
+       rmse_const(run)    = mean(vecnorm(X - mu_const,2,2));
+       max_diff_const(run)= max(vecnorm(X - mu_const,2,2)); 
+    else
+       rmse_const(run)     = mean(sqrt((X(:,1) - mu_const(:,1)).^2 + (X(:,2) - mu_const(:,2)).^2));
+       max_diff_const(run) = max(sqrt((X(:,1) - mu_const(:,1)).^2 + (X(:,2) - mu_const(:,2)).^2));
+    end
 end
 if sis == 1
     mu_sis(k,:)       = Wi_sis(:,k)' * Xi_sis(:,:,k);
-    rmse_sis(run)     = mean(vecnorm(X - mu_sis,2,2));
-    max_diff_sis(run) = max(vecnorm(X - mu_sis,2,2)); 
+    if version('-release') == '2018a'
+       rmse_sis(run)     = mean(vecnorm(X - mu_sis,2,2));
+       max_diff_sis(run) = max(vecnorm(X - mu_sis,2,2));
+    else
+       rmse_sis(run)     = mean(sqrt((X(:,1) - mu_sis(:,1)).^2 + (X(:,2) - mu_sis(:,2)).^2));
+       max_diff_sis(run) = max(sqrt((X(:,1) - mu_sis(:,1)).^2 + (X(:,2) - mu_sis(:,2)).^2));
+    end
 end
 if kalman == 1
-    rmse_kal(run)     = mean(vecnorm(X - X_kal,2,2));
-    max_diff_kal(run) = max(vecnorm(X - X_kal,2,2)); 
+    if version('-release') == '2018a'
+       rmse_kal(run)     = mean(vecnorm(X - X_kal,2,2));
+       max_diff_kal(run) = max(vecnorm(X - X_kal,2,2));
+    else
+       rmse_kal(run)     = mean(sqrt((X(:,1) - X_kal(:,1)).^2 + (X(:,2) - X_kal(:,2)).^2));
+       max_diff_kal(run) = max(sqrt((X(:,1) - X_kal(:,1)).^2 + (X(:,2) - X_kal(:,2)).^2));
+    end
 end
 
 %% Plotting the state trajectory and estimates

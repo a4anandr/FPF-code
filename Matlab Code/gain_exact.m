@@ -27,7 +27,6 @@ for i = 1 : N
     K(i) = integral(i) / p_x(Xi(i));
 end
 
- 
 %% For displaying figures
 if diag == 1
     figure;

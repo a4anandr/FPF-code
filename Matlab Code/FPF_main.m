@@ -18,20 +18,20 @@ diag_main = 1;   % Diagnostics flag for main function, displays figures in main.
 diag_output = 1;
 diag_fn = 0;     % Diagnostics flag, if 1, then all the functions display plots for diagnostics, Set it to 0 to avoid plots from within the calling functions
 % rng(400);      % Set a common seed
-No_runs = 1;   % Total number of runs to compute the rmse metric for each of the filters for comparison
+No_runs = 1;     % Total number of runs to compute the rmse metric for each of the filters for comparison
 
 %% Flags to be set to choose which methods to compare
 
 exact  = 1;      % Computes the exact gain and plots 
-fin    = 0;      % Computes gain using finite dimensional basis
-coif   = 0;      % Computes gain using Coifman kernel method
+fin    = 1;      % Computes gain using finite dimensional basis
+coif   = 1;      % Computes gain using Coifman kernel method
 rkhs   = 1;      % Computes gain using RKHS
-zero_mean = 1;   % Computes gain using RKHS enforcing constant gain constraint
+zero_mean = 0;   % Computes gain using RKHS enforcing constant gain constraint
 memory = 0;      % Computes gain using RKHS with a memory parameter for previous gain
 zm_mem = 1;      % Computes gain using const gain approx and a memory parameter for previous gain
 const  = 1;      % Computes the constant gain approximation
-kalman = 1;      % Runs Kalman Filter for comparison
-sis    = 1;      % Runs Sequential Importance Sampling Particle Filter 
+kalman = 0;      % Runs Kalman Filter for comparison
+sis    = 0;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
 
@@ -48,13 +48,13 @@ end
 if coif == 1
    eps_coif = 0.1;   % Time step parameter
    Phi = zeros(N,1); % Initializing the solution to Poisson's equation with zeros
-   exact_coif = 1;   % Setting this flag to 1 computes a smooth density via EM and then computes the exact gain using the integral formula. 
+   exact_coif = 0;   % Setting this flag to 1 computes a smooth density via EM and then computes the exact gain using the integral formula. 
 end
 
 % iii) RKHS
 if rkhs == 1
    kernel   = 0;           % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel
-   lambda   = 1e-1;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda   = 1e-2;        %1e-2;        % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_rkhs = 0.1;         % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    K_rkhs   = zeros(1,N);  % Initializing the gain to a 1 vector, this value is used only at k = 1. 
    exact_rkhs = 0;         % Setting this flag to 1 computes a smooth density via EM and then computes the exact gain using the integral formula. 
@@ -63,7 +63,7 @@ end
 % iv) RKHS zero mean
 if zero_mean == 1
    kernel    = 0;                % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel
-   lambda_zm = 1e-1;             % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda_zm = 1e-2;             % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_zm    = 0.1;              % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    K_zm      = zeros(1,N);       % Initializing the gain to a 1 vector, this value is used only at k = 1. 
    exact_zm  = 0;                % Setting this flag to 1 computes a smooth density via EM and then computes the exact gain using the integral formula. 
@@ -72,7 +72,7 @@ end
 % v) RKHS with memory
 if memory == 1
    kernel          = 0;          % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel
-   lambda_mem      = 1e-1;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda_mem      = 1e-2;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_mem         = 0.1;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain_mem = 0;          % 1e-4; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_mem           = zeros(1,N); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
@@ -82,7 +82,7 @@ end
 % vi) RKHS ZM with memory
 if zm_mem == 1
    kernel          = 0;          % 0 for Gaussian kernel, 1 for Coifman kernel, 2 for approximate Coifman kernel
-   lambda_zm_mem   = 1e-1;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
+   lambda_zm_mem   = 1e-2;       % 0.05, 0.02, Regularization parameter - Other tried values ( 0.005,0.001,0.05), For kernel = 0, range 0.005 - 0.01.
    eps_zm_mem      = 0.1;        % Variance parameter of the kernel  - Other tried values (0.25,0.1), For kernel = 0, range 0.1 - 0.25.
    lambda_gain_zm_mem = 1;       % 1e-1; % This parameter decides how much the gain can change in successive time instants, higher value implying less variation. 
    K_zm_mem        = zeros(1,N); % Initializing the gain to a 1 vector, this value is used only at k = 1. 
@@ -101,7 +101,7 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 0.02;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;      % Time increments for the SDE
 
 % State process parameters
@@ -189,8 +189,9 @@ X(1)   = mu(2);
 Z(1)   = c_x(X(1)) * dt + sigmaW * sdt * randn;
 
 for k = 2: 1: (T/dt)
-    % k    
-    X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
+    k    
+    % X(k) = X(k-1) +   a_x(X(k-1)) * dt + sigmaB * sdt * randn;
+    X(k) = X(k-1);
     Z(k) = Z(k-1) +   c_x(X(k))  * dt + sigmaW * sdt * randn; 
     
     if k == 2 
@@ -200,8 +201,9 @@ for k = 2: 1: (T/dt)
     end
     
     if exact == 1
-        [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
-        [K_exact(k,:)]   = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
+        % [mu_em, sigma_em, w_em ] = em_gmm ( Xi_exact(k-1,:), mu_em, sigma_em, w_em, diag_fn);  % To obtain the exact solution, a smoothing density that would have generated these particles needs to be computed via Expectation Maximization
+        % [K_exact(k,:)]   = gain_exact(Xi_exact(k-1,:), c_x, mu_em, sigma_em, w_em, diag_fn );    % Once the smooth density parameters are computed, they can be passed to the gain computation function
+        [K_exact(k,:)]   = gain_exact(Xi_exact(k-1,:), c_x, mu, sigma, w, diag_fn ); 
         mu_exact(k-1)    = mean(Xi_exact(k-1,:));         % Suspect these two lines need to be outside the for loop with N
         c_hat_exact(k-1) = mean(c_x(Xi_exact(k-1,:)));
     end
@@ -224,8 +226,8 @@ for k = 2: 1: (T/dt)
     end 
     
     if rkhs == 1
-        %[beta K_rkhs(k,:)] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, alpha, K_rkhs(k-1,:) , diag_fn);
-        [~,K_rkhs(k,:)] = gain_rkhs_multi(Xi_rkhs(k-1,:)' , c_x, 1, kernel,lambda, eps_rkhs, diag_fn);
+        [beta K_rkhs(k,:)] = gain_rkhs(Xi_rkhs(k-1,:) , c_x, kernel,lambda, eps_rkhs, 0, K_rkhs(k-1,:) , diag_fn);
+        % [~,K_rkhs(k,:)] = gain_rkhs_multi(Xi_rkhs(k-1,:)' , c_x, 1, kernel,lambda, eps_rkhs, diag_fn);
         mu_rkhs(k-1)     = mean(Xi_rkhs(k-1,:));
         c_hat_rkhs(k-1)  = mean(c_x(Xi_rkhs(k-1,:)));
         

@@ -1,2 +1,4 @@
-# FPF-full-package
-Contains all the FPF filtering simulation MATLAB code with various gain approximation methods
+# FPF-Code
+Contains the Feedback particle filter (FPF) code 
+i) Gain function approximation - Both MATLAB and Python codes are available.
+ii) Filtering examples - Currently, only MATLAB code is available.

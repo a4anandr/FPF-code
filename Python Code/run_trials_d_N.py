@@ -114,14 +114,14 @@ if __name__ == '__main__':
                     
                     if parameters.diff_td == 1:
                         if d == 1:
-                            K_diff_td = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, diag = 0)
+                            K_diff_td = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, diag = 1)
                         if parameters.exact == 1:
                             mse_diff_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_td)
                             
                     if parameters.finite == 1:
                         if d == 1:
                             if parameters.method == 'integration':
-                                X, K_finite_X = fpf.gain_finite_integrate(c_x, parameters.w_b, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag = 1)
+                                X, K_finite_X = fpf.gain_finite_integrate(c_x, parameters.w_b, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag = 0)
                                 knn = spatial.KDTree(X.reshape((len(X),1)))
                                 K_finite = K_finite_X[knn.query(Xi)[1]].reshape(N,1)
                             else:
@@ -144,14 +144,14 @@ if __name__ == '__main__':
                             mse_rkhs_N[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_N)
     
                     if parameters.rkhs_dN == 1:
-                        eps_rkhs_dN = 1
-                        Lambda_rkhs_dN = 10**(-3)
+                        eps_rkhs_dN = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
+                        Lambda_rkhs_dN = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                         K_rkhs_dN = fpf.gain_rkhs_dN(Xi, C, eps_rkhs_dN, Lambda_rkhs_dN, diag = 0)
                         if parameters.exact == 1:
                             mse_rkhs_dN[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_dN)
     
                     if parameters.om == 1:
-                        eps_om = 0.5 # hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
+                        eps_om = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
                         Lambda_om = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                         K_om = fpf.gain_rkhs_om(Xi, C, eps_om, Lambda_om, diag = 0)
                         if parameters.exact == 1:
@@ -222,7 +222,7 @@ if __name__ == '__main__':
 
     if No_runs == 1:
         if parameters.exact == 1 and parameters.const == 1 and parameters.coif == 1 and parameters.om == 1 and parameters.diff_td ==1:
-            fpf.plot_gains(Xi, K_exact=K_exact, K_const = K_const, K_diff_td = K_diff_td, K_om = K_rkhs_dN)
+            fpf.plot_gains(Xi,p_b,x,K_exact=K_exact, K_const = K_const, K_diff_td = K_diff_td, K_om = K_rkhs_dN)
  
     if len(N_values) > 1:
         ##### Plotting MSE v $N$ for all $d$

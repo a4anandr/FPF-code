@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sp
 
 import matplotlib.pyplot as plt
-get_ipython().run_line_magic('matplotlib','qt')
+get_ipython().run_line_magic('matplotlib','inline')
 
 def gauss_kernel(X, eps):
     K = np.exp(-X**2 / (4 * eps))

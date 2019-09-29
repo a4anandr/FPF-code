@@ -14,7 +14,7 @@ font = {'family' : 'normal',
 d_values = np.arange(1,2) # np.arange(1,11)
 N_values = [500] #[25,50,75,100,150,200,350,500,750,1000, 5000]
 No_runs = 1 #100
-seed = 300
+seed = 350
 
 eps = [0.01, 0.05, 0.1, 0.2 , 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
 # eps = [0.1, 0.2, 0.5, 0.75]
@@ -53,7 +53,7 @@ coif_iterations = 1000
 
  # Parameters of the prior density \rho_B - 2 component Gaussian mixture density
 m = 2      # No of components in the Gaussian mixture
-sigma_b = [0.75, 0.75] #[0.4472, 0.4472]   # Gives \sigma^2 = 0.2
+sigma_b = [0.475, 0.475] #[0.4472, 0.4472]   # Gives \sigma^2 = 0.2
 mu_b  = [-1, 1]
 w_b   = [0.5, 0.5]
 w_b[-1] = 1 - sum(w_b[:-1])

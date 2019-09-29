@@ -58,61 +58,211 @@ def mean_squared_error(K_exact, K_approx):
     # mse2 = np.sum(((K_exact - K_approx)**2) *np.concatenate(p_vec(Xi)))
     return mse
 
+## Defining basis functions
+# =============================================================================
+# ### get_poly() - Function to compute and return polynomial basis functions upto the passed degree on the passed data points
+# =============================================================================
+def get_poly(Xi, d):
+    N = Xi.shape[0]
+    Psi = np.array(np.zeros((N,d)))
+    Psi_x = np.array(np.zeros((N,d)))
+    
+    # print('Using polynomial basis')
+    for i,n in enumerate(np.arange(1,d+1)):
+        Psi[:,i] = np.reshape(Xi**n,-1)
+        Psi_x[:,i]= np.reshape(n * Xi**(n-1),-1)
+    
+    return Psi,Psi_x
+
+# =============================================================================
+# ### get_fourier() - Function to compute and return Fourier basis functions upto the passed degree on the passed data points
+# =============================================================================
+def get_fourier(Xi, d):
+    N = Xi.shape[0]
+    Psi = np.array(np.zeros((N,d)))
+    Psi_x = np.array(np.zeros((N,d)))
+    
+    print('Using Fourier basis')
+    for n in np.arange(0,d,2):
+        Psi[:,n] = np.reshape(np.sin((n/2 +1) * Xi),-1)
+        Psi_x[:,n] = np.reshape(np.cos((n/2 +1) * Xi),-1)
+        Psi[:,n+1] = np.reshape(np.cos((n/2 +1) * Xi),-1)
+        Psi_x[:,n+1] = np.reshape(-np.sin((n/2 +1) * Xi),-1)
+        
+    return Psi,Psi_x
+
+# =============================================================================
+# ### get_weighted_poly() - Function to compute and return weighted polynomial basis functions upto the passed degree on the passed data points
+# =============================================================================
+def get_weighted_poly(Xi,d,mu,sigma):
+    N = Xi.shape[0]
+    Psi = np.array(np.zeros((N,d)))
+    Psi_x = np.array(np.zeros((N,d)))
+    
+    # print('Using weighted polynomial basis')
+    p_basis = np.zeros((N,len(mu)))
+    p_diff_basis = np.zeros((N,len(mu)))
+    for i in np.arange(len(mu)):
+        p_basis[:,i] = np.reshape(np.exp(-(Xi - mu[i])**2/ (2 * sigma[i]**2)),-1)
+        p_diff_basis[:,i] = np.reshape( -((Xi - mu[i])/sigma[i]**2).reshape(-1) * p_basis[:,i], -1)
+    
+    for n in np.arange(0,d,2):
+        Psi[:,n] = (Xi**(n/2 +1)).reshape(-1) * p_basis[:,0]
+        Psi_x[:,n] = (((n/2 +1)* Xi**(n/2)).reshape(-1) * p_basis[:,0]) + ((Xi**(n/2 +1)).reshape(-1) * p_diff_basis[:,0])
+        Psi[:,n+1] = (Xi**(n/2 +1)).reshape(-1) * p_basis[:,1]
+        Psi_x[:,n+1] = (((n/2 +1)* Xi**(n/2)).reshape(-1) * p_basis[:,1]) + ((Xi**(n/2 +1)).reshape(-1) * p_diff_basis[:,1])
+    
+    return Psi,Psi_x
+# =============================================================================
+# ### append_const_basis() - Function to append a constant function to make it an affine parameterization
+# =============================================================================
+def append_const_basis(Xi,Psi,Psi_x):
+    Psi = np.append(Psi,Xi, axis =1)
+    Psi_x = np.append(Psi_x, np.ones((len(Xi),1)), axis =1)         
+    return Psi,Psi_x
+
 ## Different gain approximation algorithms
 # =============================================================================
-# ### gain_finite - Function to approximate the gain function with a finite set of basis
+# ### gain_diff_td - Function to approximate the gain function with a finite set of basis
 # =============================================================================
-def gain_finite_integrate(c_x, mu, sigma, d, basis, diag = 0):
+def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
+    start = timer()
+    N,dim = Xi.shape
+    K = np.zeros((N,dim))
+
+    # Defining the potential function U and its derivatives 
+    U = -log(p)
+    Udot = diff(U,x[0])
+    Uddot = diff(Udot, x[0])
+    
+    p_x = lambdify(x[0],p,'numpy')
+    U_x = lambdify(x[0],U,'numpy')
+    Udot_x = lambdify(x[0],Udot,'numpy')
+    Uddot_x = lambdify(x[0], Uddot,'numpy')
+    
+    # Derivative of c(x)
+    cdot = diff(c[0],x[0])
+    cdot_x = lambdify(x[0],cdot, 'numpy')
+    
+    # Running a discretized Langevin diffusion
+    T = parameters.T
+    dt = 0.01
+    sdt = np.sqrt(dt)
+    sqrt2 = np.sqrt(2)
+    Phi = np.zeros(T)
+    
+    if affine.lower() == 'y':
+        d+= 1
+    varphi = np.zeros((T,d))
+    b = np.zeros((T,d))
+    M = np.zeros((T,d,d))
+    M[0,:,:] = 1e-3 * np.eye(d)
+    beta_td = np.zeros((T,d))
+    for n in np.arange(1,T):
+        Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
+        if basis == 'poly':
+            Psi,Psi_x = get_poly(np.expand_dims(Phi[n-1],axis=1),d)
+        elif basis == 'fourier':
+            if affine.lower() == 'y':
+                Psi,Psi_x = get_fourier(np.expand_dims(Phi[n-1],axis=1),d-1)
+                Psi,Psi_x = append_const_basis(np.expand_dims(np.expand_dims(Phi[n-1],axis=1),axis=1),Psi,Psi_x)
+            else:
+                Psi,Psi_x = get_fourier(np.expand_dims(Phi[n-1],axis=1),d)
+        elif basis == 'weighted':
+            if affine.lower() == 'y':
+                Psi,Psi_x = get_weighted_poly(np.expand_dims(Phi[n-1],axis=1),d-1,mu,sigma)
+                Psi,Psi_x = append_const_basis(np.expand_dims(np.expand_dims(Phi[n-1],axis=1),axis=1),Psi,Psi_x)
+            else:
+                Psi,Psi_x = get_weighted_poly(np.expand_dims(Phi[n-1],axis=1),d,mu,sigma)
+        
+        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_x) * dt
+        b[n,:] = b[n-1,:] + varphi[n-1,:] * cdot_x(Phi[n-1]) * dt
+        M[n,:,:] = M[n-1,:,:] + np.expand_dims( Psi_x.T * Psi_x * dt, axis =0)
+        beta_td[n,:] = np.linalg.solve(M[n,:],b[n,:])
+    beta_final = beta_td[n,:]
+    
+    if basis == 'poly':
+        Psi,Psi_x = get_poly(Xi,d)
+    elif basis == 'fourier':
+        if affine.lower() == 'y':
+            Psi,Psi_x = get_fourier(Xi,d-1)
+            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+        else:
+            Psi,Psi_x = get_fourier(Xi,d)
+    elif basis == 'weighted':
+        if affine.lower() == 'y':
+            Psi,Psi_x = get_weighted_poly(Xi,d-1,mu,sigma)
+            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+        else:
+            Psi,Psi_x = get_weighted_poly(Xi,d,mu,sigma)
+
+    for i in np.arange(Psi_x.shape[1]):
+        K = K + beta_final[i] * np.reshape(Psi_x[:,i],(-1,1))
+            
+    if diag == 1:
+        plt.figure()
+        ax1 = sns.distplot(Phi, label = 'Langevin')
+        ax1.plot(np.arange(-3,3,0.1),p_x(np.arange(-3,3,0.1)),'--',label ='$\\rho(x)$')
+        ax1.legend()
+        plt.title('Histogram of Langevin samples vs $\\rho(x)$')
+        plt.show()
+        
+        
+        plt.figure()
+        plt.plot(Xi, Psi,'*')
+        plt.title('Basis funtions')
+        plt.show()
+        
+        plt.figure()
+        plt.plot(Xi, Psi_x,'^')
+        plt.title('Basis derivatives')
+        plt.show()
+        
+    end = timer()
+    print('Time taken for gain_finite()' , end - start)
+    
+    return K
+
+# =============================================================================
+# ### gain_finite_integrate - Function to approximate the gain function with a finite set of basis
+# =============================================================================
+def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
     start = timer()
     
     step = 0.05
-    X = np.arange(-3,3,step)
-    K = np.zeros((len(X),1))
-    Psi = np.array(np.zeros((len(X),d)))
-    Psi_x = np.array(np.zeros((len(X),d)))
-    p  = np.zeros((len(X)))
+    X = np.expand_dims(np.arange(-3,3,step),axis=1)
+    N,dim = X.shape
     
-    for i in np.arange(len(mu)):
-        p = p + np.exp(-(X - mu[i])**2/ (2 * sigma[i]**2))
+    K = np.zeros((N,dim))
+    
+    p  = np.zeros((N,1))
+    for i in np.arange(len(w)):
+        p = p + w[i] * np.exp(-(X - mu[i])**2/ (2 * sigma[i]**2))
     p = p/np.sum(p)
     
     if basis == 'poly':
-        print('Using polynomial basis')
-        for i,n in enumerate(np.arange(1,d+1)):
-            Psi[:,i] = np.reshape(X**n,-1)
-            Psi_x[:,i]= np.reshape(n * X**(n-1),-1)
+        Psi,Psi_x = get_poly(X, d)
     elif basis == 'fourier':
-        print('Using Fourier basis')
-        for n in np.arange(0,d,2):
-            Psi[:,n] = np.reshape(np.sin((n/2 +1) * X),-1)
-            Psi_x[:,n] = np.reshape(np.cos((n/2 +1) * X),-1)
-            Psi[:,n+1] = np.reshape(np.cos((n/2 +1) * X),-1)
-            Psi_x[:,n+1] = np.reshape(-np.sin((n/2 +1) * X),-1)
+        Psi,Psi_x = get_fourier(X, d)
+        if affine.lower() == 'y':
+            Psi,Psi_x = append_const_basis(X, Psi, Psi_x) 
     elif basis == 'weighted':
-        print('Using weighted polynomial basis')
-        p_basis = np.zeros((len(X),len(mu)))
-        p_diff_basis = np.zeros((len(X),len(mu)))
-        for i in np.arange(len(mu)):
-            p_basis[:,i] = np.reshape(np.exp(-(X - mu[i])**2/ (2 * sigma[i]**2)),-1)
-            p_diff_basis[:,i] = np.reshape( -((X - mu[i])/sigma[i]**2).reshape(-1) * p_basis[:,i], -1)
-        for n in np.arange(0,d,2):
-            Psi[:,n] = (X**(n/2 +1)).reshape(-1) * p_basis[:,0]
-            Psi_x[:,n] = (((n/2 +1)* X**(n/2)).reshape(-1) * p_basis[:,0]) + ((X**(n/2 +1)).reshape(-1) * p_diff_basis[:,0])
-            Psi[:,n+1] = (X**(n/2 +1)).reshape(-1) * p_basis[:,1]
-            Psi_x[:,n+1] = (((n/2 +1)* X**(n/2)).reshape(-1) * p_basis[:,1]) + ((X**(n/2 +1)).reshape(-1) * p_diff_basis[:,1])
+        Psi,Psi_x = get_weighted_poly(X,d, mu,sigma)
+        if affine.lower() == 'y':
+            Psi,Psi_x = append_const_basis(X, Psi, Psi_x)
+             
+    eta = np.mean(c_x(X)* p)
+    Y = c_x(X) -eta
     
-    eta = np.mean(c_x(*X.reshape(len(X),1).T)* p)
-    Y = c_x(*X.reshape(len(X),1).T) -eta
-    
-    b_psi        = np.dot(Y * p, Psi).T
-    M_psi        = np.dot(Psi_x.T * p, Psi_x)
+    b_psi        = np.dot(np.squeeze(Y * p,axis=2), Psi).T
+    M_psi        = np.dot(Psi_x.T * p.reshape(-1), Psi_x)
    
     if(np.linalg.det(M_psi)!=0):
         beta_psi     = np.linalg.solve(M_psi, b_psi) 
     else:
         beta_psi     = np.linalg.lstsq(M_psi,b_psi)[0]
     
-    for i,n in enumerate(np.arange(1,d+1)):
+    for i in np.arange(Psi_x.shape[1]):
         K = K + beta_psi[i] * np.reshape(Psi_x[:,i],(-1,1))
             
     if diag == 1:
@@ -125,24 +275,16 @@ def gain_finite_integrate(c_x, mu, sigma, d, basis, diag = 0):
         plt.plot(X, Psi_x,'^')
         plt.title('Basis derivatives')
         plt.show()
-        
-        if basis == 'weighted':
-            plt.figure()
-            plt.plot(X, p_basis,'*')
-            plt.show()
-            
-            plt.figure()
-            plt.plot(X, p_diff_basis, '^')
-            plt.show()
+
     end = timer()
-    print('Time taken for gain_finite()' , end - start)
+    print('Time taken for gain_finite_integrate()' , end - start)
     
     return X,K    
 
 # =============================================================================
 # ### gain_finite - Function to approximate the gain function with a finite set of basis
 # =============================================================================
-def gain_finite(Xi, C, mu, sigma, d, basis, diag = 0):
+def gain_finite(Xi, C, mu, sigma, d, basis, affine, diag = 0):
     start = timer()
     N,dim = Xi.shape
     
@@ -151,42 +293,28 @@ def gain_finite(Xi, C, mu, sigma, d, basis, diag = 0):
     Psi_x = np.array(np.zeros((N,d)))
 
     if basis == 'poly':
-        print('Using polynomial basis')
-        for i,n in enumerate(np.arange(1,d+1)):
-            Psi[:,i] = np.reshape(Xi**n,-1)
-            Psi_x[:,i]= np.reshape(n * Xi**(n-1),-1)
+        Psi,Psi_x = get_poly(Xi, d)
     elif basis == 'fourier':
-        print('Using Fourier basis')
-        for n in np.arange(0,d,2):
-            Psi[:,n] = np.reshape(np.sin((n/2 +1) * Xi),-1)
-            Psi_x[:,n] = np.reshape(np.cos((n/2 +1) * Xi),-1)
-            Psi[:,n+1] = np.reshape(np.cos((n/2 +1) * Xi),-1)
-            Psi_x[:,n+1] = np.reshape(-np.sin((n/2 +1) * Xi),-1)
+        Psi,Psi_x = get_fourier(Xi, d)
+        if affine.lower() == 'y':
+            Psi,Psi_x = append_const_basis(Xi, Psi, Psi_x) 
     elif basis == 'weighted':
-        print('Using weighted polynomial basis')
-        p_basis = np.zeros((N,len(mu)))
-        p_diff_basis = np.zeros((N,len(mu)))
-        for i in np.arange(len(mu)):
-            p_basis[:,i] = np.reshape(np.exp(-(Xi - mu[i])**2/ (2 * sigma[i]**2)),-1)
-            p_diff_basis[:,i] = np.reshape( -((Xi - mu[i])/sigma[i]**2).reshape(-1) * p_basis[:,i], -1)
-        for n in np.arange(0,d,2):
-            Psi[:,n] = (Xi**(n/2 +1)).reshape(-1) * p_basis[:,0]
-            Psi_x[:,n] = (((n/2 +1)* Xi**(n/2)).reshape(-1) * p_basis[:,0]) + ((Xi**(n/2 +1)).reshape(-1) * p_diff_basis[:,0])
-            Psi[:,n+1] = (Xi**(n/2 +1)).reshape(-1) * p_basis[:,1]
-            Psi_x[:,n+1] = (((n/2 +1)* Xi**(n/2)).reshape(-1) * p_basis[:,1]) + ((Xi**(n/2 +1)).reshape(-1) * p_diff_basis[:,1])
-    
+        Psi,Psi_x = get_weighted_poly(Xi,d, mu,sigma)
+        if affine.lower() == 'y':
+            Psi,Psi_x = append_const_basis(Xi, Psi, Psi_x)
+            
     eta = np.mean(C)
     Y = (C -eta)
     
-    b_psi        = (1/N) * np.dot(np.transpose(Psi), Y)
-    M_psi        = (1/N) * np.dot(np.transpose(Psi_x), Psi_x)
+    b_psi        = (1/N) * np.dot(Psi.T, Y)
+    M_psi        = (1/N) * np.dot(Psi_x.T, Psi_x)
    
     if(np.linalg.det(M_psi)!=0):
         beta_psi     = np.linalg.solve(M_psi, b_psi) 
     else:
         beta_psi     = np.linalg.lstsq(M_psi,b_psi)[0]
     
-    for i,n in enumerate(np.arange(1,d+1)):
+    for i in np.arange(Psi_x.shape[1]):
         K = K + beta_psi[i] * np.reshape(Psi_x[:,i],(-1,1))
             
     if diag == 1:
@@ -200,14 +328,6 @@ def gain_finite(Xi, C, mu, sigma, d, basis, diag = 0):
         plt.title('Basis derivatives')
         plt.show()
         
-        if basis == 'weighted':
-            plt.figure()
-            plt.plot(Xi, p_basis,'*')
-            plt.show()
-            
-            plt.figure()
-            plt.plot(Xi, p_diff_basis, '^')
-            plt.show()
     end = timer()
     print('Time taken for gain_finite()' , end - start)
     
@@ -786,21 +906,48 @@ def plot_hist_mse(mse,Lambda,eps, No_runs = None):
 # =============================================================================
 # # ### plot_gains() - Function to plot the various gain approximations passed
 # =============================================================================
-def plot_gains(Xi,K_exact, K_const = None, K2 = None, K3 = None):
+def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = None, K_om = None, K_coif = None):
     dim = Xi.shape[1]
+    p_b_x = lambdify(x[0],p_b, 'numpy')
     for d in np.arange(dim):
-        plt.figure(figsize = (10,8))
-        plt.plot(Xi[:,d], K_exact[:,d], 'o', label = 'Exact')
+        fig, ax1 = plt.subplots(figsize = (10,8))
+        ax1.plot(Xi[:,d], K_exact[:,d], 'o', label = 'Exact')
         if K_const is not None:
-            plt.axhline(y= K_const[d], color = 'k', linestyle = '--', label ='Const gain')
-        if K2 is not None:
-            plt.plot(Xi[:,d],K2[:,d], '^', label = 'Markov kernel')
-        if K3 is not None:
-            plt.plot(Xi[:,d],K3[:,d], '*', label = 'RKHS OM')
-        plt.legend(framealpha = 0)
+            ax1.axhline(y= K_const[d], color = 'k', linestyle = '--', label ='Const gain')
+        if K_finite is not None:
+            ax1.plot(Xi[:,d],K_finite[:,d], '^', label = 'Finite basis')
+        if K_diff_td is not None:
+            ax1.plot(Xi[:,d],K_diff_td[:,d], '>', label = 'Diff TD')
+        if K_om is not None:
+            ax1.plot(Xi[:,d],K_om[:,d], '+', label = 'RKHS OM')
+        if K_coif is not None:
+            ax1.plot(Xi[:,d],K_coif[:,d], 'x', label = 'Markov kernel')
+        ax1.legend(loc = 2, framealpha = 0)
+        ax1.set_ylabel('Gain')
+        ax2 = ax1.twinx()
+        ax2.plot(Xi[:,d],p_b_x(Xi[:,d]), 'k.',label = '$\\rho(x)$')
+        ax2.set_ylim(0,1)
+        ax2 = sns.distplot(Xi[:,d], label = 'Particles $X_i$')
+        ax2.legend(loc =1, framealpha = 0)
+        ax2.set_xlabel('$X$')
+        ax2.set_ylabel('Density $\\rho(x)$')
         plt.title('Gain function approximation')
+        plt.show()
+        
+# =============================================================================
+# # ### compare_hist() - Function to compare the histograms of the 2 distributions
+# =============================================================================        
+def compare_hist(Xi,p_b,x):
+    dim = Xi.shape[1]
+    p_b_x = lambdify(x[0],p_b, 'numpy')
+    for d in np.arange(dim):
+        plt.figure(figsize=(10,8))
+        ax1 = sns.distplot(Xi[:,d], label ='Particles $X_i$')
+        ax1.plot(Xi[:,d],p_b_x(Xi[:,d]),'.',label ='$\\rho(x)$')
+        plt.legend(framealpha = 0)
+        plt.title('Histogram of particles $X_i$ vs $ \\rho(x)$')
         plt.xlabel('$X$')
-        plt.ylabel('Gain')
+        plt.ylabel('Density')
         plt.show()
         
     

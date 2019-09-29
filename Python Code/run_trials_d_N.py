@@ -67,6 +67,7 @@ if __name__ == '__main__':
         saveyn = input('Do you want to save the MSEs in a file?')
         
         mse_finite = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
+        mse_diff_td = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_coif = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_rkhs_N = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_rkhs_dN = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
@@ -95,7 +96,7 @@ if __name__ == '__main__':
                     if No_runs > 1:
                         seed = np.random.randint(1,500)
                     else:
-                        seed = 100 # np.random.randint(1,500)
+                        seed = parameters.seed # np.random.randint(1,500)
                     print('Seed ', seed)
                     Xi  = fpf.get_samples(N, parameters.mu_b, parameters.sigma_b, parameters.w_b, d, gm, parameters.sigma, seed = seed)
                     if d == 1:
@@ -108,17 +109,23 @@ if __name__ == '__main__':
                         # domain = np.arange(-2,2,0.01)
                         # K_exact_plot = np.zeros((len(domain), d))
                         for d_i in np.arange(gm):
-                            K_exact[:,d_i]  = fpf.gain_num_integrate(Xi,x[0] , p_b, x, d_i)
+                            K_exact[:,d_i]  = fpf.gain_num_integrate(Xi, (c_coef[d_i] * x[0])[0], p_b, x, d_i)
                             # K_exact_plot[:,d_i]  = fpf.gain_num_integrate(domain.reshape((len(domain),1)),x[0] , p_b, x, d_i)
                     
+                    if parameters.diff_td == 1:
+                        if d == 1:
+                            K_diff_td = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, diag = 1)
+                        if parameters.exact == 1:
+                            mse_diff_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_td)
+                            
                     if parameters.finite == 1:
                         if d == 1:
                             if parameters.method == 'integration':
-                                X, K_finite_X = fpf.gain_finite_integrate(c_x, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, diag = 1)
+                                X, K_finite_X = fpf.gain_finite_integrate(c_x, parameters.w_b, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag = 0)
                                 knn = spatial.KDTree(X.reshape((len(X),1)))
                                 K_finite = K_finite_X[knn.query(Xi)[1]].reshape(N,1)
                             else:
-                                K_finite  = fpf.gain_finite(Xi, C, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, diag =1)
+                                K_finite  = fpf.gain_finite(Xi, C, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag =1)
                             if parameters.exact == 1:
                                 mse_finite[run,i,n] = fpf.mean_squared_error(K_exact, K_finite)
                                 
@@ -137,8 +144,8 @@ if __name__ == '__main__':
                             mse_rkhs_N[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_N)
     
                     if parameters.rkhs_dN == 1:
-                        eps_rkhs_dN = 1
-                        Lambda_rkhs_dN = 10**(-3)
+                        eps_rkhs_dN = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
+                        Lambda_rkhs_dN = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                         K_rkhs_dN = fpf.gain_rkhs_dN(Xi, C, eps_rkhs_dN, Lambda_rkhs_dN, diag = 0)
                         if parameters.exact == 1:
                             mse_rkhs_dN[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_dN)
@@ -214,10 +221,8 @@ if __name__ == '__main__':
         output.close()
 
     if No_runs == 1:
-        if parameters.exact == 1 and parameters.const == 1 and parameters.coif == 1 and parameters.om == 1:
-            fpf.plot_gains(Xi, K_exact, K_const, K_coif, K_om)
-        else:
-            fpf.plot_gains(Xi, K_exact, K_const, K_finite,K_om)
+        if parameters.exact == 1 and parameters.const == 1 and parameters.coif == 1 and parameters.om == 1 and parameters.diff_td ==1:
+            fpf.plot_gains(Xi,p_b,x,K_exact=K_exact, K_const = K_const, K_diff_td = K_diff_td, K_om = K_rkhs_dN)
  
     if len(N_values) > 1:
         ##### Plotting MSE v $N$ for all $d$

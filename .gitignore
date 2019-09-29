@@ -5,6 +5,7 @@ Figures/
 *.jpg
 *.pdf
 *.pkl
-
+*.pyc
 Figures_multi/
 desktop.ini
+.DS_store

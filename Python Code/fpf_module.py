@@ -135,6 +135,7 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     Udot = diff(U,x[0])
     Uddot = diff(Udot, x[0])
     
+    p_x = lambdify(x[0],p,'numpy')
     U_x = lambdify(x[0],U,'numpy')
     Udot_x = lambdify(x[0],Udot,'numpy')
     Uddot_x = lambdify(x[0], Uddot,'numpy')
@@ -199,6 +200,14 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
         K = K + beta_final[i] * np.reshape(Psi_x[:,i],(-1,1))
             
     if diag == 1:
+        plt.figure()
+        ax1 = sns.distplot(Phi, label = 'Langevin')
+        ax1.plot(np.arange(-3,3,0.1),p_x(np.arange(-3,3,0.1)),'--',label ='$\\rho(x)$')
+        ax1.legend()
+        plt.title('Histogram of Langevin samples vs $\\rho(x)$')
+        plt.show()
+        
+        
         plt.figure()
         plt.plot(Xi, Psi,'*')
         plt.title('Basis funtions')
@@ -897,7 +906,7 @@ def plot_hist_mse(mse,Lambda,eps, No_runs = None):
 # =============================================================================
 # # ### plot_gains() - Function to plot the various gain approximations passed
 # =============================================================================
-def plot_gains(Xi,p_b, K_exact, K_const = None, K_finite = None, K_diff_td = None, K_om = None, K_coif = None):
+def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = None, K_om = None, K_coif = None):
     dim = Xi.shape[1]
     p_b_x = lambdify(x[0],p_b, 'numpy')
     for d in np.arange(dim):
@@ -914,14 +923,15 @@ def plot_gains(Xi,p_b, K_exact, K_const = None, K_finite = None, K_diff_td = Non
         if K_coif is not None:
             ax1.plot(Xi[:,d],K_coif[:,d], 'x', label = 'Markov kernel')
         ax1.legend(loc = 2, framealpha = 0)
+        ax1.set_ylabel('Gain')
         ax2 = ax1.twinx()
         ax2.plot(Xi[:,d],p_b_x(Xi[:,d]), 'k.',label = '$\\rho(x)$')
         ax2.set_ylim(0,1)
         ax2 = sns.distplot(Xi[:,d], label = 'Particles $X_i$')
         ax2.legend(loc =1, framealpha = 0)
+        ax2.set_xlabel('$X$')
+        ax2.set_ylabel('Density $\\rho(x)$')
         plt.title('Gain function approximation')
-        plt.xlabel('$X$')
-        plt.ylabel('Gain')
         plt.show()
         
 # =============================================================================

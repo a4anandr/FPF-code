@@ -124,7 +124,14 @@ def get_nonlinear_basis(d, x):
     for term in np.arange(terms): 
         psi+= theta[terms * term]/ (x[0]**2 + theta[terms * term+1]* x[0] + (theta[ terms * term+2] + (theta[terms * term +1]**2/4) + 1))
     psi_theta = derive_by_array(psi,theta)
-    return psi, psi_theta
+    return psi, psi_theta,theta
+
+def subs_theta_nonlinear_basis(psi, psi_theta, theta, theta_val):
+    psi = lambdify(theta, psi, 'numpy')
+    psi_theta = lambdify(theta, psi_theta, 'numpy')
+    Psi = psi(*theta_val.T)
+    Psi_theta = psi_theta(*theta_val.T)
+    return Psi, Psi_theta
 
 # =============================================================================
 # ### append_const_basis() - Function to append a constant function to make it an affine parameterization
@@ -154,7 +161,7 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     Uddot_x = lambdify(x[0], Uddot,'numpy')
     
     # Derivative of c(x)
-    cdot = diff(c[0],x[0])
+    cdot = diff(c,x[0])
     cdot_x = lambdify(x[0],cdot, 'numpy')
     
     # Running a discretized Langevin diffusion
@@ -259,10 +266,8 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
     Uddot_x = lambdify(x[0], Uddot,'numpy')
     
     # Derivative of c(x)
-    cdot = diff(c[0],x[0])
+    cdot = diff(c,x[0])
     cdot_x = lambdify(x[0],cdot, 'numpy')
-    
-    psi,psi_theta = get_nonlinear_basis(d, x)
     
     # Running a discretized Langevin diffusion
     T = parameters.T
@@ -270,29 +275,39 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
     sdt = np.sqrt(dt)
     sqrt2 = np.sqrt(2)
     Phi = np.zeros(T)
-
-    for n in np.arange(1,T):
-        Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
-        
     varphi = np.zeros((T,d))
     b = np.zeros((T,d))
     M = np.zeros((T,d,d))
     M[0,:,:] = 1e-3 * np.eye(d)
-    beta_td = np.zeros((T,d))
-    for n in np.arange(1,T):
-        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_x[n-1,:]) * dt
-        b[n,:] = b[n-1,:] + varphi[n-1,:] * cdot_x(Phi[n-1]) * dt
-        M[n,:,:] = M[n-1,:,:] + np.expand_dims( np.expand_dims(Psi_x[n-1,:],axis=1).T * np.expand_dims(Psi_x[n-1,:],axis=1) * dt, axis =0)
-        beta_td[n,:] = np.linalg.solve(M[n,:],b[n,:])
-    beta_final = beta_td[n,:]
     
-
-    if basis == 'nonlinear':
-        Psi,Psi_x = get_nonlinear_basis(Xi,d)
-
-    for i in np.arange(Psi_x.shape[1]):
-        K = K + beta_final[i] * np.reshape(Psi_x[:,i],(-1,1))
-            
+    theta_td = np.zeros((T,d))
+    theta_td[0,:] = np.random.rand(d)
+    psi,psi_theta,theta = get_nonlinear_basis(d, x)
+    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_td[0,:])
+    
+    for n in np.arange(1,T):
+        print(n)
+        # Discretized Langevin diffusion
+        Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
+       
+        # Computing Psi_theta at Phi for the latest parameter values
+        Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_td[n-1,:])
+        Psi_x = lambdify(x[0], Psi, 'numpy')
+        Psi_theta_x = lambdify(x[0],Psi_theta,'numpy')
+        Psi_theta_Phi = np.expand_dims(np.array(Psi_theta_x(Phi[n-1])),axis=0)
+        
+        # Eligibility vector ODE discretization
+        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_theta_Phi) * dt
+        sa_term = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi_x(Phi[n-1]) * Psi_theta_Phi) * dt
+        sa_gain = (1/(n+1))
+        M[n,:,:] = M[n-1,:,:] + Psi_theta_Phi.T * Psi_theta_Phi * dt
+        theta_td[n,:] = theta_td[n-1,:] + sa_gain * sa_term
+    
+    theta_final = theta_td[n,:]
+    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_final)
+    Psi_x = lambdify(x[0],Psi,'numpy')
+    K   = Psi_x(Xi)
+    
     if diag == 1:
         plt.figure()
         ax1 = sns.distplot(Phi, label = 'Langevin')
@@ -300,18 +315,6 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         ax1.legend(framealpha=0)
         plt.title('Histogram of Langevin samples vs $\\rho(x)$')
         plt.show()
-    
-        
-        plt.figure()
-        plt.plot(Xi, Psi,'*')
-        plt.title('Basis funtions')
-        plt.show()
-        
-        plt.figure()
-        plt.plot(Xi, Psi_x,'^')
-        plt.title('Basis derivatives')
-        plt.show()
-        
     end = timer()
     print('Time taken for gain_diff_td()' , end - start)
     

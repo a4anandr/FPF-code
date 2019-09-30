@@ -149,7 +149,10 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     start = timer()
     N,dim = Xi.shape
     K = np.zeros((N,dim))
-
+    
+    step = 0.1
+    X = np.arange(mu[0]-3*sigma[0], mu[1]+3*sigma[1],step)
+    
     # Defining the potential function U and its derivatives 
     U = -log(p)
     Udot = diff(U,x[0])
@@ -226,7 +229,7 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     if diag == 1:
         plt.figure()
         ax1 = sns.distplot(Phi, label = 'Langevin')
-        ax1.plot(np.arange(-3,3,0.1),p_x(np.arange(-3,3,0.1)),'--',label ='$\\rho(x)$')
+        ax1.plot(X,p_x(X),'--',label ='$\\rho(x)$')
         ax1.legend(framealpha=0)
         plt.title('Histogram of Langevin samples vs $\\rho(x)$')
         plt.show()
@@ -298,7 +301,7 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         
         # Eligibility vector ODE discretization
         varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_theta_Phi) * dt
-        sa_term = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi_x(Phi[n-1]) * Psi_theta_Phi) * dt
+        sa_term = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi_x(Phi[n-1]) * Psi_theta_Phi) #* dt
         sa_gain = (1/(n+1))
         M[n,:,:] = M[n-1,:,:] + Psi_theta_Phi.T * Psi_theta_Phi * dt
         theta_td[n,:] = theta_td[n-1,:] + sa_gain * sa_term
@@ -315,6 +318,12 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         ax1.legend(framealpha=0)
         plt.title('Histogram of Langevin samples vs $\\rho(x)$')
         plt.show()
+        
+        fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(d*8,8), sharex ='all')
+        for i in np.arange(d):
+            axes[i].plot(np.arange(T),theta_td[:,i],label = '$\theta_{}'.format(i))
+            axes[i].legend(framealpha=0)
+        plt.show()
     end = timer()
     print('Time taken for gain_diff_td()' , end - start)
     
@@ -326,7 +335,7 @@ def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
     start = timer()
     
     step = 0.05
-    X = np.expand_dims(np.arange(-3,3,step),axis=1)
+    X = np.expand_dims(np.arange(mu[0]-3*sigma[0],mu[1]+3*sigma[1],step),axis=1)
     N,dim = X.shape
     
     K = np.zeros((N,dim))
@@ -1002,7 +1011,7 @@ def plot_hist_mse(mse,Lambda,eps, No_runs = None):
 # =============================================================================
 # # ### plot_gains() - Function to plot the various gain approximations passed
 # =============================================================================
-def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = None, K_om = None, K_coif = None):
+def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = None, K_diff_nl_td = None, K_om = None, K_coif = None):
     dim = Xi.shape[1]
     p_b_x = lambdify(x[0],p_b, 'numpy')
     for d in np.arange(dim):
@@ -1014,6 +1023,8 @@ def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = No
             ax1.plot(Xi[:,d],K_finite[:,d], '^', label = 'Finite basis')
         if K_diff_td is not None:
             ax1.plot(Xi[:,d],K_diff_td[:,d], '>', label = 'Diff TD')
+        if K_diff_nl_td is not None:
+            ax1.plot(Xi[:,d],K_diff_nl_td[:,d], '>', label = 'Diff TD - Nonlinear')
         if K_om is not None:
             ax1.plot(Xi[:,d],K_om[:,d], '+', label = 'RKHS OM')
         if K_coif is not None:

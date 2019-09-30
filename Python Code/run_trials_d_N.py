@@ -68,6 +68,7 @@ if __name__ == '__main__':
         
         mse_finite = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_diff_td = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
+        mse_diff_nl_td = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_coif = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_rkhs_N = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
         mse_rkhs_dN = np.zeros((No_runs, len(parameters.d_values), len(parameters.N_values)))
@@ -79,7 +80,7 @@ if __name__ == '__main__':
         for d in dim:     # dimension of the system
             i = parameters.d_values.tolist().index(d)
             x = symbols('x0:%d'%d)
-            c_coef = np.ones((1,d))   # [1,0]
+            c_coef = np.ones(d)# np.ones((1,d))   # [1,0]
             c =  c_coef.dot(x)      # Observation function
             c_x = lambdify(x, c, 'numpy')
             p_b = 0
@@ -109,7 +110,8 @@ if __name__ == '__main__':
                         # domain = np.arange(-2,2,0.01)
                         # K_exact_plot = np.zeros((len(domain), d))
                         for d_i in np.arange(gm):
-                            K_exact[:,d_i]  = fpf.gain_num_integrate(Xi, (c_coef[d_i] * x[0])[0], p_b, x, d_i)
+                            # K_exact[:,d_i]  = fpf.gain_num_integrate(Xi, (c_coef[d_i] * x[0])[0], p_b, x, d_i)
+                            K_exact[:,d_i]  = fpf.gain_num_integrate(Xi, (c_coef[d_i] * x[0]), p_b, x, d_i)
                             # K_exact_plot[:,d_i]  = fpf.gain_num_integrate(domain.reshape((len(domain),1)),x[0] , p_b, x, d_i)
                     
                     if parameters.diff_td == 1:
@@ -118,6 +120,12 @@ if __name__ == '__main__':
                         if parameters.exact == 1:
                             mse_diff_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_td)
                             
+                    if parameters.diff_nl_td == 1:
+                        if d ==1:
+                            K_diff_nl_td = fpf.gain_diff_nl_td(Xi, c, p_b, x, 9, diag = 1)
+                        if parameters.exact == 1:
+                            mse_diff_nl_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_nl_td)
+
                     if parameters.finite == 1:
                         if d == 1:
                             if parameters.method == 'integration':

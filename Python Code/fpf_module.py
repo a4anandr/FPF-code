@@ -118,11 +118,13 @@ def get_weighted_poly(Xi,d,mu,sigma):
 # ### get_nonlinear_basis() - Function to compute and return nonlinear parameterization on the passed data points
 # =============================================================================
 def get_nonlinear_basis(d, x): 
-    theta = symbols('theta:%d'%d)
+    theta = symbols('theta:%d'%(d+1))
     psi = 0
     terms = 3
     for term in np.arange(terms): 
         psi+= theta[terms * term]/ (x[0]**2 + theta[terms * term+1]* x[0] + (theta[ terms * term+2] + (theta[terms * term +1]**2/4) + 1))
+    if parameters.affine.lower() == 'y':
+        psi+= theta[d]
     psi_theta = derive_by_array(psi,theta)
     return psi, psi_theta,theta
 
@@ -278,18 +280,20 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
     sdt = np.sqrt(dt)
     sqrt2 = np.sqrt(2)
     Phi = np.zeros(T)
-    varphi = np.zeros((T,d))
-    b = np.zeros((T,d))
-    M = np.zeros((T,d,d))
-    M[0,:,:] = 1e-3 * np.eye(d)
+      
+    # M = np.zeros((T,d,d))
+    #M[0,:,:] = 1e-3 * np.eye(d)
     
+    psi,psi_theta,theta = get_nonlinear_basis(d, x)
+    d = len(theta)
+    varphi = np.zeros((T,d))
     theta_td = np.zeros((T,d))
     theta_td[0,:] = np.random.rand(d)
-    psi,psi_theta,theta = get_nonlinear_basis(d, x)
     Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_td[0,:])
     
     for n in np.arange(1,T):
-        print(n)
+        if np.mod(n,1000) == 0:
+            print(n)
         # Discretized Langevin diffusion
         Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
        
@@ -303,7 +307,7 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_theta_Phi) * dt
         sa_term = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi_x(Phi[n-1]) * Psi_theta_Phi) #* dt
         sa_gain = (1/(n+1))
-        M[n,:,:] = M[n-1,:,:] + Psi_theta_Phi.T * Psi_theta_Phi * dt
+        # M[n,:,:] = M[n-1,:,:] + Psi_theta_Phi.T * Psi_theta_Phi * dt
         theta_td[n,:] = theta_td[n-1,:] + sa_gain * sa_term
     
     theta_final = theta_td[n,:]
@@ -319,9 +323,9 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         plt.title('Histogram of Langevin samples vs $\\rho(x)$')
         plt.show()
         
-        fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(d*8,8), sharex ='all')
+        fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(8,d*8), sharex ='all')
         for i in np.arange(d):
-            axes[i].plot(np.arange(T),theta_td[:,i],label = '$\theta_{}'.format(i))
+            axes[i].plot(np.arange(T),theta_td[:,i],label = '$\\theta_{}$'.format(i))
             axes[i].legend(framealpha=0)
         plt.show()
     end = timer()

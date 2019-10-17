@@ -19,12 +19,14 @@ import math
 from timeit import default_timer as timer
 
 import matplotlib.pyplot as plt
-from matplotlib import rc
+import matplotlib
 
 import parameters
 
-rc('text',usetex = True)
-rc('font', **parameters.font)
+matplotlib.rc('text',usetex = True)
+#rc('font', **parameters.font)
+matplotlib.rcParams.update(parameters.font_params)
+
 import seaborn as sns
 
 from IPython.display import clear_output
@@ -117,16 +119,20 @@ def get_weighted_poly(Xi,d,mu,sigma):
 # =============================================================================
 # ### get_nonlinear_basis() - Function to compute and return nonlinear parameterization on the passed data points
 # =============================================================================
-def get_nonlinear_basis(d, x): 
+def get_nonlinear_basis(d, x, basis): 
     theta = symbols('theta:%d'%(d+1))
+    theta_list = [t for t in theta]
     psi = 0
     terms = 3
     for term in np.arange(terms): 
-        psi+= theta[terms * term]/ (x[0]**2 + theta[terms * term+1]* x[0] + (theta[ terms * term+2] + (theta[terms * term +1]**2/4) + 1))
+        if basis == 1:
+            psi+= theta[terms * term]/ (x[0]**2 + theta[terms * term+1]* x[0] + (theta[ terms * term+2] + (theta[terms * term +1]**2/4) + 1))
+        else:
+            psi+= theta[terms * term]/ ((x[0] - theta[terms * term+1])**2 + theta[ terms * term+2]**2)
     if parameters.affine.lower() == 'y':
         psi+= theta[d]
     psi_theta = derive_by_array(psi,theta)
-    return psi, psi_theta,theta
+    return psi, psi_theta,theta_list
 
 def subs_theta_nonlinear_basis(psi, psi_theta, theta, theta_val):
     psi = lambdify(theta, psi, 'numpy')
@@ -134,6 +140,28 @@ def subs_theta_nonlinear_basis(psi, psi_theta, theta, theta_val):
     Psi = psi(*theta_val.T)
     Psi_theta = psi_theta(*theta_val.T)
     return Psi, Psi_theta
+
+def compute_Psi_gradient(theta,Phi, basis):
+    d = len(theta)
+    terms = 3
+    Psi = 0
+    Psi_theta = np.zeros(d)
+    for term in np.arange(terms): 
+        if basis == 1:
+            Psi += theta[terms * term]/ (Phi**2 + theta[terms * term+1]* Phi + (theta[ terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))
+            Psi_theta[terms * term] = 1/ (Phi**2 + theta[terms * term+1]* Phi + (theta[ terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))
+            Psi_theta[terms * term+1] = - theta[terms * term] * (Phi + theta[terms * term+1]/2)/( Phi**2 + (theta [terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))**2
+            Psi_theta[terms * term+2] = - theta[terms * term] / (Phi**2 + (theta [terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))**2
+        else:
+            Psi += theta[terms * term]/ ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )
+            Psi_theta[terms * term] = 1/ ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )
+            Psi_theta[terms * term+1] = 2 * theta[terms * term] * (Phi - theta[terms * term+1])/((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )**2
+            Psi_theta[terms * term+2] = - 2 * theta[terms * term] * theta[terms * term+2] / ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )**2
+    if parameters.affine.lower() == 'y':
+        Psi+= theta[d-1]
+        Psi_theta[d-1] = 1
+    Psi_theta = np.expand_dims(Psi_theta, axis=1)
+    return Psi,Psi_theta
 
 # =============================================================================
 # ### append_const_basis() - Function to append a constant function to make it an affine parameterization
@@ -147,7 +175,120 @@ def append_const_basis(Xi,Psi,Psi_x):
 # =============================================================================
 # ### gain_diff_td - Function to approximate the gain function with a finite set of basis
 # =============================================================================
-def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
+def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
+    start = timer()
+    N,dim = Xi.shape
+    K = np.zeros((N,dim))
+    
+    step = 0.1
+    X = np.arange(mu[0]-3*sigma[0], mu[1]+3*sigma[1],step)
+    
+    # Defining the potential function U and its derivatives 
+    U = -log(p)
+    Udot = diff(U,x[0])
+    Uddot = diff(Udot, x[0])
+    
+    p_x = lambdify(x[0],p,'numpy')
+    U_x = lambdify(x[0],U,'numpy')
+    Udot_x = lambdify(x[0],Udot,'numpy')
+    Uddot_x = lambdify(x[0], Uddot,'numpy')
+    
+    # Derivative of c(x)
+    cdot = diff(c,x[0])
+    cdot_x = lambdify(x[0],cdot, 'numpy')
+    
+    # Running a discretized Langevin diffusion
+    # T = parameters.T
+    dt = 0.01
+    sdt = np.sqrt(dt)
+    sqrt2 = np.sqrt(2)
+    Phi = np.zeros(T)
+    
+    if affine.lower() == 'y':
+        d+= 1
+    
+    for n in np.arange(1,T):
+        Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
+
+    if basis == 'poly':
+        Psi,Psi_x = get_poly(Phi,d)
+    elif basis == 'fourier':
+        if affine.lower() == 'y':
+            Psi,Psi_x = get_fourier(Phi,d-1)
+            Psi,Psi_x = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
+        else:
+            Psi,Psi_x = get_fourier(Phi,d)
+    elif basis == 'weighted':
+        if affine.lower() == 'y':
+            Psi,Psi_x = get_weighted_poly(Phi,d-1,mu,sigma)
+            Psi,Psi_x = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
+        else:
+            Psi,Psi_x = get_weighted_poly(Phi,d,mu,sigma)
+    
+    varphi = np.zeros((T,d))
+    b = np.zeros(d)
+    M = 1e-3 * np.eye(d)
+    beta_td = np.zeros((T,d))
+    for n in np.arange(1,T):
+        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_x[n-1,:]) * dt
+        b =  (n/(n+1)) * b + (1/(n+1)) * varphi[n-1,:] * cdot_x(Phi[n-1])
+        M =  (n/(n+1)) * M + (1/(n+1)) * np.expand_dims(Psi_x[n-1,:],axis=1).T * np.expand_dims(Psi_x[n-1,:],axis=1)
+        beta_td[n,:] = np.linalg.solve(M,b)
+    beta_final = beta_td[n,:]
+    
+    if basis == 'poly':
+        Psi,Psi_x = get_poly(Xi,d)
+    elif basis == 'fourier':
+        if affine.lower() == 'y':
+            Psi,Psi_x = get_fourier(Xi,d-1)
+            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+        else:
+            Psi,Psi_x = get_fourier(Xi,d)
+    elif basis == 'weighted':
+        if affine.lower() == 'y':
+            Psi,Psi_x = get_weighted_poly(Xi,d-1,mu,sigma)
+            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+        else:
+            Psi,Psi_x = get_weighted_poly(Xi,d,mu,sigma)
+
+    for i in np.arange(Psi_x.shape[1]):
+        K = K + beta_final[i] * np.reshape(Psi_x[:,i],(-1,1))
+            
+    if diag == 1:
+        plt.figure(figsize = parameters.figure_size)
+        ax1 = sns.distplot(Phi, label = 'Langevin')
+        ax1.plot(X,p_x(X),'--',label ='$\\rho(x)$')
+        ax1.legend(framealpha=0)
+        plt.title('Histogram of Langevin samples vs $\\rho(x)$')
+        plt.show()
+    
+        
+        plt.figure(figsize = parameters.figure_size)
+        plt.plot(Xi, Psi,'*')
+        plt.title('Basis funtions')
+        plt.show()
+        
+        plt.figure(figsize = parameters.figure_size)
+        plt.plot(Xi, Psi_x,'^')
+        plt.title('Basis derivatives')
+        plt.show()
+        
+        fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(8,d*8), sharex ='all')
+        for i in np.arange(d):
+            axes[i].plot(np.arange(T), beta_td[:,i],label = '$\\theta_{}$'.format(i))
+            axes[i].legend(framealpha=0)
+        plt.show()
+
+        
+    end = timer()
+    print('Time taken for gain_diff_td()' , end - start)
+    
+    return K,Phi
+
+# =============================================================================
+# ### gain_diff_td_sa - Function to approximate the gain function with a finite set of basis
+# =============================================================================
+def gain_diff_td_sa(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     start = timer()
     N,dim = Xi.shape
     K = np.zeros((N,dim))
@@ -198,17 +339,16 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
             Psi,Psi_x = get_weighted_poly(Phi,d,mu,sigma)
     
     varphi = np.zeros((T,d))
-    b = np.zeros((T,d))
-    M = np.zeros((T,d,d))
-    M[0,:,:] = 1e-3 * np.eye(d)
+    b = np.zeros(d)
+    M = 1e-3 * np.eye(d)
     beta_td = np.zeros((T,d))
     for n in np.arange(1,T):
+        sa_gain = (1/(n+1))
         varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_x[n-1,:]) * dt
-        b[n,:] = b[n-1,:] + varphi[n-1,:] * cdot_x(Phi[n-1]) * dt
-        M[n,:,:] = M[n-1,:,:] + np.expand_dims( np.expand_dims(Psi_x[n-1,:],axis=1).T * np.expand_dims(Psi_x[n-1,:],axis=1) * dt, axis =0)
-        beta_td[n,:] = np.linalg.solve(M[n,:],b[n,:])
+        b = (n/(n+1))* b + (1/(n+1)) * varphi[n-1,:] * cdot_x(Phi[n-1])
+        M = (n/(n+1)) * M + (1/(n+1)) * np.expand_dims(Psi_x[n-1,:],axis=1).T * np.expand_dims(Psi_x[n-1,:],axis=1)
+        beta_td[n,:] = beta_td[n-1,:] + sa_gain * (np.linalg.solve(M,b) - beta_td[n-1,:])
     beta_final = beta_td[n,:]
-    
 
     if basis == 'poly':
         Psi,Psi_x = get_poly(Xi,d)
@@ -229,7 +369,7 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
         K = K + beta_final[i] * np.reshape(Psi_x[:,i],(-1,1))
             
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         ax1 = sns.distplot(Phi, label = 'Langevin')
         ax1.plot(X,p_x(X),'--',label ='$\\rho(x)$')
         ax1.legend(framealpha=0)
@@ -237,25 +377,30 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
         plt.show()
     
         
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Psi,'*')
         plt.title('Basis funtions')
         plt.show()
         
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Psi_x,'^')
         plt.title('Basis derivatives')
         plt.show()
         
-    end = timer()
-    print('Time taken for gain_diff_td()' , end - start)
-    
-    return K
+        fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(8,d*8), sharex ='all')
+        for i in np.arange(d):
+            axes[i].plot(np.arange(T), beta_td[:,i],label = '$\\theta_{}$'.format(i))
+            axes[i].legend(framealpha=0)
+        plt.show()
 
+    end = timer()
+    print('Time taken for gain_diff_td_sa()' , end - start)
+    
+    return K,Phi
 # =============================================================================
 # ### gain_diff_nl_td - Function to approximate the gain function with a finite set of basis
 # =============================================================================
-def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
+def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     start = timer()
     N,dim = Xi.shape
     K = np.zeros((N,dim))
@@ -275,21 +420,32 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
     cdot_x = lambdify(x[0],cdot, 'numpy')
     
     # Running a discretized Langevin diffusion
-    T = parameters.T
+    #T = parameters.T
     dt = 0.01
     sdt = np.sqrt(dt)
     sqrt2 = np.sqrt(2)
     Phi = np.zeros(T)
-      
-    # M = np.zeros((T,d,d))
-    #M[0,:,:] = 1e-3 * np.eye(d)
     
-    psi,psi_theta,theta = get_nonlinear_basis(d, x)
+    psi,psi_theta,theta = get_nonlinear_basis(d, x, basis)
     d = len(theta)
     varphi = np.zeros((T,d))
-    theta_td = np.zeros((T,d))
-    theta_td[0,:] = np.random.rand(d)
-    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_td[0,:])
+    sa_term = np.zeros((T,d))
+    # M = np.zeros((T,d,d))
+    M = 1e-3 * np.eye(d)
+    
+    beta_td = np.zeros((T,d))
+    beta_td[0,:] = np.random.rand(d)
+    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,beta_td[0,:])
+    if parameters.sa.lower() == 'polyak':
+        sa_beta = 0.6
+        const = 1
+    elif parameters.sa.lower() == 'snr':
+        sa_beta = 1 
+        const = 1
+        beta_M = 0.85
+    else:
+        sa_beta = 1
+        const = 2
     
     for n in np.arange(1,T):
         if np.mod(n,1000) == 0:
@@ -298,25 +454,35 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
        
         # Computing Psi_theta at Phi for the latest parameter values
-        Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_td[n-1,:])
-        Psi_x = lambdify(x[0], Psi, 'numpy')
-        Psi_theta_x = lambdify(x[0],Psi_theta,'numpy')
-        Psi_theta_Phi = np.expand_dims(np.array(Psi_theta_x(Phi[n-1])),axis=0)
-        
+#        Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_td[n-1,:])
+#        Psi_x = lambdify(x[0], Psi, 'numpy')
+#        Psi_theta_x = lambdify(x[0],Psi_theta,'numpy')
+#        Psi_theta_Phi = np.expand_dims(np.array(Psi_theta_x(Phi[n-1])),axis=0)
+             
+        Psi,Psi_theta = compute_Psi_gradient(beta_td[n-1,:],Phi[n-1], basis)
         # Eligibility vector ODE discretization
-        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_theta_Phi) * dt
-        sa_term = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi_x(Phi[n-1]) * Psi_theta_Phi) #* dt
-        sa_gain = (1/(n+1))
-        # M[n,:,:] = M[n-1,:,:] + Psi_theta_Phi.T * Psi_theta_Phi * dt
-        theta_td[n,:] = theta_td[n-1,:] + sa_gain * sa_term
-    
-    theta_final = theta_td[n,:]
-    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,theta_final)
+        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_theta.reshape(-1)) * dt
+        sa_term[n,:] = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi * Psi_theta.reshape(-1)) # Avoid dt, it might lower the gain and make asymptotic variance infinite. All SA theory is for disrete time
+        sa_gain = (const/(n+1))**sa_beta
+        if parameters.sa.lower() == 'snr':
+            # M[n,:,:] = ((n-1)/n) * M[n-1,:,:] + (1/ n ) * Psi_theta.T * Psi_theta
+            # M = ((n-1)/n) * M + (1/n) * Psi_theta.T * Psi_theta
+            M = M - (1/(n+1)**beta_M) *( M  - Psi_theta.T * Psi_theta) * dt
+            beta_td[n,:] = beta_td[n-1,:] + sa_gain * np.linalg.solve(-M, sa_term[n,:].T).reshape(-1)
+        else:
+            beta_td[n,:] = beta_td[n-1,:] + sa_gain * sa_term[n,:]
+        beta_td[n,:] = np.minimum(np.maximum(beta_td[n,:],0),100)
+    if parameters.sa.lower() == 'polyak':    
+        beta_final = np.mean(beta_td, axis =0)
+    else:   
+        beta_final = beta_td[n,:]
+        
+    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,beta_final)
     Psi_x = lambdify(x[0],Psi,'numpy')
     K   = Psi_x(Xi)
     
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         ax1 = sns.distplot(Phi, label = 'Langevin')
         ax1.plot(np.arange(-3,3,0.1),p_x(np.arange(-3,3,0.1)),'--',label ='$\\rho(x)$')
         ax1.legend(framealpha=0)
@@ -325,13 +491,13 @@ def gain_diff_nl_td(Xi, c, p, x, d, diag = 0):
         
         fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(8,d*8), sharex ='all')
         for i in np.arange(d):
-            axes[i].plot(np.arange(T),theta_td[:,i],label = '$\\theta_{}$'.format(i))
+            axes[i].plot(np.arange(T),beta_td[:,i],label = '$\\theta_{}$'.format(i))
             axes[i].legend(framealpha=0)
         plt.show()
     end = timer()
-    print('Time taken for gain_diff_td()' , end - start)
+    print('Time taken for gain_diff_nl_td()' , end - start)
     
-    return K
+    return K,Phi
 # =============================================================================
 # ### gain_finite_integrate - Function to approximate the gain function with a finite set of basis
 # =============================================================================
@@ -375,12 +541,12 @@ def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
         K = K + beta_psi[i] * np.reshape(Psi_x[:,i],(-1,1))
             
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(X, Psi,'*')
         plt.title('Basis funtions')
         plt.show()
         
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(X, Psi_x,'^')
         plt.title('Basis derivatives')
         plt.show()
@@ -427,12 +593,12 @@ def gain_finite(Xi, C, mu, sigma, d, basis, affine, diag = 0):
         K = K + beta_psi[i] * np.reshape(Psi_x[:,i],(-1,1))
             
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Psi,'*')
         plt.title('Basis funtions')
         plt.show()
         
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Psi_x,'^')
         plt.title('Basis derivatives')
         plt.show()
@@ -483,7 +649,7 @@ def gain_rkhs_2N(Xi, C, epsilon, Lambda, diag = 0):
             K[i,:] = K[i,:] + beta_2N[j] * Ker_x[i,j,:] + beta_2N[N+j] * Ker_xy[i,j,:]
             
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Ker[:,0],'r*')
         plt.plot(Xi, Ker_x[:,0], 'b*')
         plt.plot(Xi, Ker_xy[:,0],'k*')
@@ -566,7 +732,7 @@ def gain_rkhs_dN(Xi, C, epsilon, Lambda, diag = 1):
                 K[i,:] = K[i,:] + beta_dN[(d_i + 1) *N + j] * Ker_xy[i,j,(d_i+1),1:]
             
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi[:,0], Ker[:,1],'r*')
         plt.plot(Xi, Ker_x[:,1,0], 'b*')
 #         plt.plot(Xi, Ker_xy[:,1,1,1],'k*')
@@ -610,7 +776,7 @@ def gain_rkhs_dN(Xi, C, epsilon, Lambda, diag = 1):
                 K[i,:] = K[i,:] + beta_N[j] * Ker_x[i,j,:]
                 
         if diag == 1:
-            plt.figure()
+            plt.figure(figsize = parameters.figure_size)
             plt.plot(Xi, Ker[:,100],'r*')
             plt.plot(Xi, Ker_x[:,100,:], 'b*')
             plt.show()
@@ -750,7 +916,7 @@ def gain_coif(Xi, C, epsilon, Phi, No_iterations = parameters.coif_iterations, d
         for j in range(N):
             K[i,:] = K[i,:] + (1/ (2 * epsilon)) * T[i,j] * (r[j] - sum_term[i]) * Xi[j,:]                                  
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, g[1,:], 'r*')
         plt.show()
     
@@ -795,7 +961,7 @@ def gain_coif_old(Xi, C, epsilon, Phi, No_iterations =50000, diag = 0):
             K[i,:] = K[i,:] + (1/ (2 * epsilon)) * T[i,j] * Phi[j,] * (Xi[j,:] - sum_term[i,:])   
             
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, g[1,:], 'r*')
         plt.show()
     
@@ -858,7 +1024,7 @@ def gain_rkhs_om(Xi, C, epsilon, Lambda, diag = 0):
     K  = K.reshape((K.shape[0],dim))   
     
     if diag == 1:
-        plt.figure()
+        plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Ker[:,0],'r*')
         plt.plot(Xi, Ker_x[:,0], 'b*')
         #plt.plot(Xi, Ker_xy[:,0],'k*')
@@ -986,7 +1152,7 @@ def select_hyperparameters(method,Lambda = None,eps = None, No_runs = None, N = 
 # ### contour_lambda_eps() - Function to plot contour plots of mses vs a grid of $\lambda$ and $\epsilon$ values
 # =============================================================================
 def contour_lambda_eps(mse_mean, Lambda, eps, contour_levels = None):
-    fig = plt.figure(figsize =(10,8))
+    fig = plt.figure(figsize =parameters.figure_size)
     if contour_levels:
         cont = plt.contourf(eps, np.log10(Lambda),mse_mean.transpose(), contour_levels)
     else:
@@ -1004,7 +1170,7 @@ def contour_lambda_eps(mse_mean, Lambda, eps, contour_levels = None):
 # ### plot_hist_mse() - Function to plot a histogram of mses obtained from independent trials
 # =============================================================================
 def plot_hist_mse(mse,Lambda,eps, No_runs = None):
-    plt.figure(figsize = (10,8))    
+    plt.figure(figsize = parameters.figure_size)    
     for i,eps_i in enumerate(eps):
             for j,Lambda_j in enumerate(Lambda):
                 sns.distplot(mse[:,i,j], label = str(Lambda_j) +',' +str(eps_i))
@@ -1018,8 +1184,9 @@ def plot_hist_mse(mse,Lambda,eps, No_runs = None):
 def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = None, K_diff_nl_td = None, K_om = None, K_coif = None):
     dim = Xi.shape[1]
     p_b_x = lambdify(x[0],p_b, 'numpy')
+    savefigyn = input('Do you want to save the figures as pdf?(y/n)')
     for d in np.arange(dim):
-        fig, ax1 = plt.subplots(figsize = (10,8))
+        fig, ax1 = plt.subplots(figsize = parameters.figure_size)
         ax1.plot(Xi[:,d], K_exact[:,d], 'o', label = 'Exact')
         if K_const is not None:
             ax1.axhline(y= K_const[d], color = 'k', linestyle = '--', label ='Const gain')
@@ -1044,6 +1211,9 @@ def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = No
         ax2.set_ylabel('Density $\\rho(x)$')
         plt.title('Gain function approximation')
         plt.show()
+        
+        if savefigyn.lower() == 'y':
+            fig.savefig('Figure/Gain_comparison_d_{}.pdf'.format(d))
         
 # =============================================================================
 # # ### compare_hist() - Function to compare the histograms of the 2 distributions

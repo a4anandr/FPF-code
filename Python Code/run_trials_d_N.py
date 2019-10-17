@@ -116,20 +116,20 @@ if __name__ == '__main__':
                     
                     if parameters.diff_td == 1:
                         if d == 1:
-                            K_diff_td = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, diag = 1)
+                            K_diff_td,_ = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, parameters.T_values[2], diag = 1)
                         if parameters.exact == 1:
                             mse_diff_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_td)
                             
                     if parameters.diff_nl_td == 1:
                         if d ==1:
-                            K_diff_nl_td = fpf.gain_diff_nl_td(Xi, c, p_b, x, 9, diag = 1)
+                            K_diff_nl_td,_ = fpf.gain_diff_nl_td(Xi, c, p_b, x, 9, parameters.nlbasis, parameters.T_values[2], diag = 1)
                         if parameters.exact == 1:
                             mse_diff_nl_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_nl_td)
 
                     if parameters.finite == 1:
                         if d == 1:
                             if parameters.method == 'integration':
-                                X, K_finite_X = fpf.gain_finite_integrate(c_x, parameters.w_b, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag = 0)
+                                X, K_finite_X = fpf.gain_finite_integrate(c_x, parameters.w_b, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine,  diag = 0)
                                 knn = spatial.KDTree(X.reshape((len(X),1)))
                                 K_finite = K_finite_X[knn.query(Xi)[1]].reshape(N,1)
                             else:
@@ -229,13 +229,13 @@ if __name__ == '__main__':
         output.close()
 
     if No_runs == 1:
-        if parameters.exact == 1 and parameters.const == 1 and parameters.coif == 1 and parameters.om == 1 and parameters.diff_td ==1:
-            fpf.plot_gains(Xi,p_b,x,K_exact=K_exact, K_const = K_const, K_diff_td = K_diff_td, K_om = K_rkhs_dN)
+        if parameters.exact == 1 and parameters.const == 1 and parameters.coif == 0 and parameters.om == 1 and parameters.diff_td ==1 and parameters.diff_nl_td ==1:
+            fpf.plot_gains(Xi,p_b,x,K_exact=K_exact, K_const = K_const, K_diff_td = K_diff_td, K_diff_nl_td = K_diff_nl_td, K_om = K_om)
  
     if len(N_values) > 1:
         ##### Plotting MSE v $N$ for all $d$
         for i,d in enumerate(dim):
-            fig = plt.figure(figsize=(10,5))
+            fig = plt.figure(figsize = parameters.figure_size)
             plt.plot(N_values, np.mean(mse_coif,axis = 0)[i], label = 'Markov kernel')
             plt.plot(N_values, np.mean(mse_om, axis =0)[i], label = 'RKHS OM')
             plt.plot(N_values, np.mean(mse_const,axis =0)[i], 'k--',label = 'Const')
@@ -248,7 +248,7 @@ if __name__ == '__main__':
         
         ##### Log plot of MSE v $\log N$ for all $d$
         for i,d in enumerate(dim):
-            fig = plt.figure(figsize=(10,5))
+            fig = plt.figure(figsize = parameters.figure_size)
             plt.plot(N_values, np.mean(mse_coif,axis = 0)[i], label = 'Markov kernel')
             plt.plot(N_values, np.mean(mse_om, axis =0)[i], label = 'RKHS OM')
             plt.plot(N_values, np.mean(mse_const,axis =0)[i], 'k--',label = 'Const')
@@ -265,7 +265,7 @@ if __name__ == '__main__':
         #### Including the intercept to -logN in the plot
         offset = np.mean(np.log10(np.mean(mse_om,axis =0)),axis =1) + np.mean(np.log10(N_values))
         for i,d in enumerate(dim):
-            fig = plt.figure(figsize=(10,5))
+            fig = plt.figure(figsize = parameters.figure_size)
             plt.plot(np.log10(N_values), np.log10(np.mean(mse_coif,axis = 0))[i], label = 'Markov kernel')
             plt.plot(np.log10(N_values), np.log10(np.mean(mse_om, axis =0))[i], label = 'RKHS OM')
             plt.plot(np.log10(N_values), np.log10(np.mean(mse_const,axis =0))[i], 'k--',label = 'Const')
@@ -279,7 +279,7 @@ if __name__ == '__main__':
         
         ##### Plot of MSE v $d$ for all $N$
         for n,N in enumerate(N_values):
-            fig = plt.figure(figsize=(10,5))
+            fig = plt.figure(figsize = parameters.figure_size)
             plt.plot(dim, np.mean(mse_coif,axis = 0)[:,n], label = 'Markov kernel')
             plt.plot(dim, np.mean(mse_om, axis =0)[:,n], label = 'RKHS OM')
             plt.plot(dim, np.mean(mse_const,axis =0)[:,n], 'k--',label = 'Const')

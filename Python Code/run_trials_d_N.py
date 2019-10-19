@@ -147,21 +147,21 @@ if __name__ == '__main__':
                     if parameters.rkhs_N == 1:
                         eps_rkhs_N =0.5
                         Lambda_rkhs_N = 10**(-3)
-                        K_rkhs_N = fpf.gain_rkhs_N(Xi, C, eps_rkhs_N, Lambda_rkhs_N, diag = 0)
+                        K_rkhs_N,_ = fpf.gain_rkhs_N(Xi, C, eps_rkhs_N, Lambda_rkhs_N, diag = 0)
                         if parameters.exact == 1:
                             mse_rkhs_N[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_N)
     
                     if parameters.rkhs_dN == 1:
                         eps_rkhs_dN = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
                         Lambda_rkhs_dN = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
-                        K_rkhs_dN = fpf.gain_rkhs_dN(Xi, C, eps_rkhs_dN, Lambda_rkhs_dN, diag = 0)
+                        K_rkhs_dN,_ = fpf.gain_rkhs_dN(Xi, C, eps_rkhs_dN, Lambda_rkhs_dN, diag = 0)
                         if parameters.exact == 1:
                             mse_rkhs_dN[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_dN)
     
                     if parameters.om == 1:
                         eps_om = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
                         Lambda_om = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
-                        K_om = fpf.gain_rkhs_om(Xi, C, eps_om, Lambda_om, diag = 0)
+                        K_om,_ = fpf.gain_rkhs_om(Xi, C, eps_om, Lambda_om, diag = 0)
                         if parameters.exact == 1:
                             mse_om[run,i,n] = fpf.mean_squared_error(K_exact, K_om)
     

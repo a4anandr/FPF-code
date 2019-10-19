@@ -18,8 +18,8 @@ import parameters
 
 import matplotlib
 matplotlib.rc('text',usetex = True)
-# matplotlib.rc('font', **parameters.font)
-matplotlib.rcParams.update(parameters.font_params)
+matplotlib.rc('font', **parameters.font)
+# matplotlib.rcParams.update(parameters.font_params)
 
 import matplotlib.pyplot as plt
 # get_ipython().run_line_magic('matplotlib', 'auto')
@@ -112,7 +112,7 @@ if __name__ == '__main__':
             if parameters.diff_td == 1:
                 sns.distplot(Phi_td, label = 'Histogram of $x^i$')
             if parameters.diff_nl_td == 1:
-                sns.distplot(Phi_nl_td)
+                sns.distplot(Phi_nl_td, label = 'Histogram of $x^i$')
             
             domain = np.arange(-3,3,0.1)
             ax2.plot(domain,p_b_x(domain), 'k',label = '$\\rho(x)$')

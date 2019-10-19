@@ -10,14 +10,14 @@ font = {'family' : 'normal',
         'weight' : 'bold',
         'size'   : 24}
 figure_size = (21,8)
-font_params = {'axes.labelsize': 18,'axes.titlesize':20, 'text.fontsize': 20, 'legend.fontsize': 18, 'xtick.labelsize': 20, 'ytick.labelsize': 20}
+# font_params = {'axes.labelsize': 18,'axes.titlesize':20, 'text.fontsize': 20, 'legend.fontsize': 18, 'xtick.labelsize': 20, 'ytick.labelsize': 20}
 
 
 ## Parameters for the run
-d_values = np.array([1]) # np.arange(1,2) # np.arange(1,11)
-N_values = [100, 500, 1000] #[25,50,75,100,150,200,350,500,750,1000, 5000]
+d_values = np.array([2,5,10]) # np.arange(1,2) # np.arange(1,11)
+N_values = [1000] #[25,50,75,100,150,200,350,500,750,1000, 5000]
 No_runs = 1 #100
-seed = 199 # np.random.randint(1000) #350
+seed = np.random.randint(1000) #350
 
 eps = [0.01, 0.05, 0.1, 0.2 , 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
 # eps = [0.1, 0.2, 0.5, 0.75]
@@ -27,9 +27,9 @@ Lambda =[1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]
 ## Flags to be set to choose which methods to compare
 exact  = 1      # Computes the exact gain and plots 
 diff_td = 0     # Computes the gain using diff TD algorithm using eligibility vectors
-diff_nl_td = 1  # Computes the gain using diff TD algorithm for nonlinear parameterization using Stochastic Approximation
+diff_nl_td = 0  # Computes the gain using diff TD algorithm for nonlinear parameterization using Stochastic Approximation
 finite = 0      # Computes gain using finite set of basis functions
-coif   = 0      # Computes gain using Coifman kernel method
+coif   = 1      # Computes gain using Coifman kernel method
 rkhs_N = 0      # Computes gain using subspace of RKHS
 rkhs_dN= 0      # Computes optimal gain using RKHS 
 om     = 0      # Computes gain using RKHS enforcing constant gain constraint
@@ -42,10 +42,10 @@ sis    = 0      # Runs Sequential Importance Sampling Particle Filter
 
 
 # Diff TD 
-T_values = [100000] #, 10000, 10000]
+T_values = [100000]
 
 # Finite
-basis_dim = 10
+basis_dim = [4, 6, 8]
 basis = 'fourier' # Basis functions for the finite parameterization - poly, fourier, weighted etc. 
 method = 'montecarlo' # Compute optimal parameters by numerical integration or Monte Carlo - integration or montecarlo
 affine = 'y'    # If y, adds a constant vector as one of the basis functions

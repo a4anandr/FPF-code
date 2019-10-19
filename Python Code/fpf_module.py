@@ -14,6 +14,7 @@ from sympy import *
 from scipy.spatial.distance import pdist,squareform
 from scipy.stats import norm
 import scipy.integrate as integrate
+from scipy.special import iv
 import math
 
 from timeit import default_timer as timer
@@ -24,18 +25,15 @@ import matplotlib
 import parameters
 
 matplotlib.rc('text',usetex = True)
-#rc('font', **parameters.font)
-matplotlib.rcParams.update(parameters.font_params)
+matplotlib.rc('font', **parameters.font)
+# matplotlib.rcParams.update(parameters.font_params)
 
 import seaborn as sns
 
 from IPython.display import clear_output
 
-#%matplotlib notebook
-#%matplotlib inline
-
 ## Defining some functions
-# =============================================================================
+#%% =============================================================================
 # ### get_samples() - Function to generate samples from a multi-dimensional 1d- Gaussian mixture $\times$  (d-1) independent Gaussian distribution 
 # =============================================================================
 def get_samples(N, mu, sigma_b, w, dim, gm = 1, sigma = None, seed = None):
@@ -52,7 +50,7 @@ def get_samples(N, mu, sigma_b, w, dim, gm = 1, sigma = None, seed = None):
     return Xi
 
 # =============================================================================
-# ### mean_squared_error() - Function to compute the mean square error in gain function approximation
+#%% ### mean_squared_error() - Function to compute the mean square error in gain function approximation
 # =============================================================================
 def mean_squared_error(K_exact, K_approx):
     N = len(K_exact)
@@ -62,7 +60,7 @@ def mean_squared_error(K_exact, K_approx):
 
 ## Defining basis functions
 # =============================================================================
-# ### get_poly() - Function to compute and return polynomial basis functions upto the passed degree on the passed data points
+#%% ### get_poly() - Function to compute and return polynomial basis functions upto the passed degree on the passed data points
 # =============================================================================
 def get_poly(Xi, d):
     N = Xi.shape[0]
@@ -77,24 +75,29 @@ def get_poly(Xi, d):
     return Psi,Psi_x
 
 # =============================================================================
-# ### get_fourier() - Function to compute and return Fourier basis functions upto the passed degree on the passed data points
+#%% ### get_fourier() - Function to compute and return Fourier basis functions upto the passed degree on the passed data points
 # =============================================================================
 def get_fourier(Xi, d):
     N = Xi.shape[0]
     Psi = np.array(np.zeros((N,d)))
     Psi_x = np.array(np.zeros((N,d)))
-    
+    Psi_2x = np.array(np.zeros((N,d)))
+    Psi_3x = np.array(np.zeros((N,d)))
+
     print('Using Fourier basis')
     for n in np.arange(0,d,2):
         Psi[:,n] = np.reshape(np.sin((n/2 +1) * Xi),-1)
         Psi_x[:,n] = np.reshape(np.cos((n/2 +1) * Xi),-1)
+        Psi_2x[:,n] = -Psi[:,n]
+        Psi_3x[:,n] = -Psi_x[:,n]
         Psi[:,n+1] = np.reshape(np.cos((n/2 +1) * Xi),-1)
         Psi_x[:,n+1] = np.reshape(-np.sin((n/2 +1) * Xi),-1)
-        
-    return Psi,Psi_x
+        Psi_2x[:,n+1] = -Psi[:,n+1]
+        Psi_3x[:,n+1] = -Psi_x[:,n+1]
+    return Psi, Psi_x, Psi_2x, Psi_3x
 
 # =============================================================================
-# ### get_weighted_poly() - Function to compute and return weighted polynomial basis functions upto the passed degree on the passed data points
+#%% ### get_weighted_poly() - Function to compute and return weighted polynomial basis functions upto the passed degree on the passed data points
 # =============================================================================
 def get_weighted_poly(Xi,d,mu,sigma):
     N = Xi.shape[0]
@@ -117,7 +120,7 @@ def get_weighted_poly(Xi,d,mu,sigma):
     return Psi,Psi_x
 
 # =============================================================================
-# ### get_nonlinear_basis() - Function to compute and return nonlinear parameterization on the passed data points
+#%% ### get_nonlinear_basis() - Function to compute and return nonlinear parameterization on the passed data points
 # =============================================================================
 def get_nonlinear_basis(d, x, basis): 
     theta = symbols('theta:%d'%(d+1))
@@ -164,16 +167,34 @@ def compute_Psi_gradient(theta,Phi, basis):
     return Psi,Psi_theta
 
 # =============================================================================
-# ### append_const_basis() - Function to append a constant function to make it an affine parameterization
+#%% ### append_const_basis() - Function to append a constant function to make it an affine parameterization
 # =============================================================================
-def append_const_basis(Xi,Psi,Psi_x):
+def append_const_basis(Xi,Psi,Psi_x,Psi_2x = np.zeros(1), Psi_3x = np.zeros(1)):
     Psi = np.append(Psi,Xi, axis =1)
-    Psi_x = np.append(Psi_x, np.ones((len(Xi),1)), axis =1)         
-    return Psi,Psi_x
+    Psi_x = np.append(Psi_x, np.ones((len(Xi),1)), axis =1)
+    if Psi_2x.shape[0]>1:
+        Psi_2x = np.append(Psi_2x, np.zeros((len(Xi),1)), axis=1)
+    if Psi_3x.shape[0]>1:
+        Psi_3x = np.append(Psi_3x, np.zeros((len(Xi),1)), axis=1)
+    return Psi,Psi_x,Psi_2x,Psi_3x
 
-## Different gain approximation algorithms
+
+#%% 
+# =======================================================================================
+# get_kernel_pdf() - To construct a pdf using kernel density estimation from a given set of samples Xi
+#                     symbolic computation, very expensive
+# =======================================================================================
+def get_kernel_pdf(Xi, bw = 0.1):
+    x = symbols('x0:%d'%1)
+    N = Xi.shape[0]
+    p = 0
+    for i in np.arange(N):
+        p = p + (1/ N * np.sqrt(2 * np.pi * bw**2)) * exp(-(x[0] - Xi[i])**2/ (2 * np.pi * bw**2))
+    return p
+
+#%% Different gain approximation algorithms
 # =============================================================================
-# ### gain_diff_td - Function to approximate the gain function with a finite set of basis
+#%% ### gain_diff_td - Function to approximate the gain function with a finite set of basis
 # =============================================================================
 def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
     start = timer()
@@ -286,7 +307,7 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
     return K,Phi
 
 # =============================================================================
-# ### gain_diff_td_sa - Function to approximate the gain function with a finite set of basis
+#%% ### gain_diff_td_sa - Function to approximate the gain function with a finite set of basis
 # =============================================================================
 def gain_diff_td_sa(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     start = timer()
@@ -398,7 +419,7 @@ def gain_diff_td_sa(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
     
     return K,Phi
 # =============================================================================
-# ### gain_diff_nl_td - Function to approximate the gain function with a finite set of basis
+#%% ### gain_diff_nl_td - Function to approximate the gain function with a finite set of basis
 # =============================================================================
 def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     start = timer()
@@ -499,7 +520,7 @@ def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     
     return K,Phi
 # =============================================================================
-# ### gain_finite_integrate - Function to approximate the gain function with a finite set of basis
+#%% ### gain_finite_integrate - Function to approximate the gain function with a finite set of basis
 # =============================================================================
 def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
     start = timer()
@@ -529,7 +550,8 @@ def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
     eta = np.mean(c_x(X)* p)
     Y = c_x(X) -eta
     
-    b_psi        = np.dot(np.squeeze(Y * p,axis=2), Psi).T
+    # b_psi        = np.dot(np.squeeze(Y * p,axis=2), Psi).T
+    b_psi        = np.dot(np.reshape(Y * p,(-1)), Psi).T
     M_psi        = np.dot(Psi_x.T * p.reshape(-1), Psi_x)
    
     if(np.linalg.det(M_psi)!=0):
@@ -557,7 +579,7 @@ def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
     return X,K    
 
 # =============================================================================
-# ### gain_finite - Function to approximate the gain function with a finite set of basis
+#%% ### gain_finite - Function to approximate the gain function with a finite set of basis
 # =============================================================================
 def gain_finite(Xi, C, mu, sigma, d, basis, affine, diag = 0):
     start = timer()
@@ -609,7 +631,7 @@ def gain_finite(Xi, C, mu, sigma, d, basis, affine, diag = 0):
     return K
 
 # =============================================================================
-# ### gain_rkhs_2N() - Function to approximate FPF gain using optimal RKHS method uses the extended representer theorem in - https://www.sciencedirect.com/science/article/pii/S0377042707004657?via%3Dihub
+#%% ### gain_rkhs_2N() - Function to approximate FPF gain using optimal RKHS method uses the extended representer theorem in - https://www.sciencedirect.com/science/article/pii/S0377042707004657?via%3Dihub
 # =============================================================================
 def gain_rkhs_2N(Xi, C, epsilon, Lambda, diag = 0):
     start = timer()
@@ -661,7 +683,7 @@ def gain_rkhs_2N(Xi, C, epsilon, Lambda, diag = 0):
     return K
 
 # =============================================================================
-# ### gain_rkhs_dN() - Extension to d-dimensions
+#%% ### gain_rkhs_dN() - Extension to d-dimensions
 # =============================================================================
 def gain_rkhs_dN(Xi, C, epsilon, Lambda, diag = 1):
     start = timer()
@@ -740,13 +762,13 @@ def gain_rkhs_dN(Xi, C, epsilon, Lambda, diag = 1):
             
     end = timer()
     print('Time taken for gain_rkhs_dN()' , end - start)
-    return K
+    return K,beta_dN
 
 # =============================================================================
-# ### gain_rkhs_N() - Function to approximate FPF gain using subspace RKHS method  
+#%% ### gain_rkhs_N() - Function to approximate FPF gain using subspace RKHS method  
 # # uses normal representer theorem, obtains optimal solution on a subspace of RKHS.
 # =============================================================================
-    def gain_rkhs_N(Xi, C, epsilon, Lambda, diag = 0):
+def gain_rkhs_N(Xi, C, epsilon, Lambda, diag = 0):
         start = timer()
         
         N,dim = Xi.shape
@@ -784,10 +806,10 @@ def gain_rkhs_dN(Xi, C, epsilon, Lambda, diag = 1):
         end = timer()
         print('Time taken for gain_rkhs_N()' , end - start)
         
-        return K
+        return K, beta_N
 
 # =============================================================================
-# ### gain_exact() - Function to compute the exact FPF gain by numerical integration
+#%% ### gain_exact() - Function to compute the exact FPF gain by numerical integration
 # Algorithm
 #\begin{equation} 
 #\text{K}(x) =  - \frac{1}{p(x)} \int_{-\infty}^{x} (c(y) - \hat{c}) p(y) dy
@@ -819,9 +841,9 @@ def gain_exact(Xi, c, p):
     return K
 
 # =============================================================================
-# Using scipy.integrate.quad
+#%% Using scipy.integrate.quad
 # =============================================================================
-def gain_num_integrate(Xi, c, p, x, d=0):
+def gain_num_integrate(Xi, c, p, x, d=0, int_lim = [-np.inf, np.inf]):
     start = timer()
     
     N = len(Xi)
@@ -829,16 +851,16 @@ def gain_num_integrate(Xi, c, p, x, d=0):
     integral = np.zeros(N)
     p_x = lambdify(x[0], p, 'numpy')
     cp_x  = lambdify(x[0], c*p, 'numpy')
-    c_hat = integrate.quad(cp_x, -np.inf, np.inf)[0]
+    c_hat = integrate.quad(cp_x, int_lim[0], int_lim[1])[0]
     integrand_x = lambdify(x[0], p * (c - c_hat) , 'numpy')
     integrand = lambda x: integrand_x(x)
    
     for i in range(N):
         if Xi.shape[1] == 1:
-            integral[i] = integrate.quad( integrand, -np.inf, Xi[i])[0]
+            integral[i] = integrate.quad( integrand, int_lim[0], Xi[i])[0]
             K[i] = - integral[i]/ p_x(Xi[i])
         else:
-            integral[i] = integrate.quad( integrand, -np.inf, Xi[i,d])[0]
+            integral[i] = integrate.quad( integrand, int_lim[0], Xi[i,d])[0]
             K[i] = - integral[i]/ p_x(Xi[i,d])
     # K = np.reshape(K,(N,1))
     
@@ -847,7 +869,7 @@ def gain_num_integrate(Xi, c, p, x, d=0):
     return K
 
 # =============================================================================
-# ### gain_coif() - Function to approximate FPF gain using Markov kernel approx. method -
+#%% ### gain_coif() - Function to approximate FPF gain using Markov kernel approx. method -
 # Based on the Markov semigroup approximation method in https://arxiv.org/pdf/1902.07263.pdf
 # 
 # Algorithm  
@@ -922,7 +944,7 @@ def gain_coif(Xi, C, epsilon, Phi, No_iterations = parameters.coif_iterations, d
     
     end = timer()
     print('Time taken for gain_coif()' , end - start)
-    return K
+    return K,Phi
 
 # =============================================================================
 # Slightly older version of Markov kernel approximation - from https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7799105
@@ -971,7 +993,7 @@ def gain_coif_old(Xi, C, epsilon, Phi, No_iterations =50000, diag = 0):
     return K
 
 # =============================================================================
-# ### gain_rkhs_om() - Function to approximate FPF gain using RKHS OM method - Adds a Lagrangian parameter $\mu$ to make use of the constant gain approximation
+#%% ### gain_rkhs_om() - Function to approximate FPF gain using RKHS OM method - Adds a Lagrangian parameter $\mu$ to make use of the constant gain approximation
 # Algorithm
 # 
 # $\beta^*$ obtained by solving the set of linear equations
@@ -1033,10 +1055,11 @@ def gain_rkhs_om(Xi, C, epsilon, Lambda, diag = 0):
     end = timer()
     print('Time taken for gain_rkhs_om()' , end - start)
     
-    return K
+    return K,beta_m
 
+# Gain approximation algorithms end 
 # =============================================================================
-# ## Hyperparameter selection using grid search 
+#%% ## Hyperparameter selection using grid search 
 # ### select_hyperparameters() -  Hyper parameter selection for RKHS OM for dim $d$
 # =============================================================================
 def select_hyperparameters(method,Lambda = None,eps = None, No_runs = None, N = None, dim =None): 
@@ -1149,7 +1172,7 @@ def select_hyperparameters(method,Lambda = None,eps = None, No_runs = None, N = 
         return mse,Lambda, eps, Lambda[j_min], eps[i_min]
 
 # =============================================================================
-# ### contour_lambda_eps() - Function to plot contour plots of mses vs a grid of $\lambda$ and $\epsilon$ values
+#%% ### contour_lambda_eps() - Function to plot contour plots of mses vs a grid of $\lambda$ and $\epsilon$ values
 # =============================================================================
 def contour_lambda_eps(mse_mean, Lambda, eps, contour_levels = None):
     fig = plt.figure(figsize =parameters.figure_size)
@@ -1167,7 +1190,7 @@ def contour_lambda_eps(mse_mean, Lambda, eps, contour_levels = None):
     plt.show()
 
 # =============================================================================
-# ### plot_hist_mse() - Function to plot a histogram of mses obtained from independent trials
+#%% ### plot_hist_mse() - Function to plot a histogram of mses obtained from independent trials
 # =============================================================================
 def plot_hist_mse(mse,Lambda,eps, No_runs = None):
     plt.figure(figsize = parameters.figure_size)    
@@ -1179,7 +1202,7 @@ def plot_hist_mse(mse,Lambda,eps, No_runs = None):
     plt.show()
    
 # =============================================================================
-# # ### plot_gains() - Function to plot the various gain approximations passed
+#%% # ### plot_gains() - Function to plot the various gain approximations passed
 # =============================================================================
 def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = None, K_diff_nl_td = None, K_om = None, K_coif = None):
     dim = Xi.shape[1]
@@ -1216,7 +1239,7 @@ def plot_gains(Xi,p_b,x,K_exact, K_const = None, K_finite = None, K_diff_td = No
             fig.savefig('Figure/Gain_comparison_d_{}.pdf'.format(d))
         
 # =============================================================================
-# # ### compare_hist() - Function to compare the histograms of the 2 distributions
+#%% # ### compare_hist() - Function to compare the histograms of the 2 distributions
 # =============================================================================        
 def compare_hist(Xi,p_b,x):
     dim = Xi.shape[1]
@@ -1230,5 +1253,134 @@ def compare_hist(Xi,p_b,x):
         plt.xlabel('$X$')
         plt.ylabel('Density')
         plt.show()
+
+
+#%% =============================================================================
+# CODE for Nonlinear oscillator example
+# ### get_von_mises() - Function to produce a Von mises mixture density
+# =============================================================================
+def get_von_mises(w, K, mu, dim = 1):
+    p_v = 0
+    x = symbols('x0:%d'%dim)
+    for i in np.arange(len(w)):
+        p_v = p_v + w[i] * exp(K[i] * cos(x[0] - mu[i]))/(2 * math.pi * iv(0,K[i]))
+    return p_v
+    
+# =============================================================================
+# ### gain_diff_td_oscillator - Function to approximate the gain function with a finite set of basis
+# =============================================================================
+def gain_diff_td_oscillator(Xi, c,p, x, d, basis, affine, T, seed, diag = 0):
+    start = timer()
+    N,dim = Xi.shape
+    K = np.zeros((N,dim))
+    K_be = np.zeros((N,dim))
+    
+    np.random.seed(seed)
+    
+    step = 0.1
+    X = np.arange(-math.pi, math.pi, step)
+    
+    # Defining the potential function U and its derivatives 
+    U = -log(p)
+    Udot = diff(U,x[0])
+    Uddot = diff(Udot, x[0])
+    
+    p_x = lambdify(x[0],p,'numpy')
+    U_x = lambdify(x[0],U,'numpy')
+    Udot_x = lambdify(x[0],Udot,'numpy')
+    Uddot_x = lambdify(x[0], Uddot,'numpy')
+    
+    # Derivative of c(x)
+    cdot = diff(c,x[0])
+    cdot_x = lambdify(x[0],cdot, 'numpy')
+    
+    # Running a discretized Langevin diffusion
+    # T = parameters.T
+    dt = 0.01
+    sdt = np.sqrt(dt)
+    sqrt2 = np.sqrt(2)
+    Phi = np.zeros(T)
+    
+    if affine.lower() == 'y':
+        d+= 1
+    
+    for n in np.arange(1,T):
+        Phi[n] = Phi[n-1] - Udot_x(Phi[n-1]) * dt + sqrt2 * np.random.randn() * sdt 
+        Phi[n] = np.mod(Phi[n] + math.pi, 2*math.pi) - math.pi
+        
+    if basis == 'poly':
+        Psi,Psi_x = get_poly(Phi,d)
+    elif basis == 'fourier':
+        if affine.lower() == 'y':
+            Psi, Psi_x, Psi_2x, Psi_3x = get_fourier(Phi,d-1)
+            Psi, Psi_x, Psi_2x, Psi_3x = append_const_basis(np.expand_dims(Phi,axis=1),Psi, Psi_x, Psi_2x, Psi_3x)
+        else:
+            Psi, Psi_x, Psi_2x, Psi_3x = get_fourier(Phi,d)
+   
+    varphi = np.zeros((T,d))
+    b = np.zeros(d)
+    M = 1e-3 * np.eye(d)
+    beta_td = np.zeros((T,d))
+    
+    b_be = np.zeros(d)
+    M_be = 1e-3 * np.eye(d)
+    beta_be = np.zeros((T,d))
+    for n in np.arange(1,T):
+        varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_x[n-1,:]) * dt
+        b =  (n/(n+1)) * b + (1/(n+1)) * varphi[n-1,:] * cdot_x(Phi[n-1])
+        M =  (n/(n+1)) * M + (1/(n+1)) * np.expand_dims(Psi_x[n-1,:],axis=1).T * np.expand_dims(Psi_x[n-1,:],axis=1)
+        beta_td[n,:] = np.linalg.solve(M,b)
+    
+        dDPhi = Uddot_x(Phi[n-1]) * Psi_x[n-1,:] + Udot_x(Phi[n-1]) * Psi_2x[n-1,:] - Psi_3x[n-1,:]
+        M_be  = (n/(n+1)) * M_be + (1/(n+1)) * np.dot(dDPhi.reshape((-1,1)), dDPhi.reshape((-1,1)).T)
+        b_be  = (n/(n+1)) * b_be + (1/(n+1))* dDPhi * cdot_x(Phi[n-1])
+        beta_be[n,:] = np.linalg.solve(M_be,b_be);
+    
+    beta_final = beta_td[n,:]
+    beta_final_be = beta_be[n,:]
+    
+    if basis == 'poly':
+        Psi,Psi_x = get_poly(Xi,d)
+    elif basis == 'fourier':
+        if affine.lower() == 'y':
+            Psi,Psi_x,_,_ = get_fourier(Xi,d-1)
+            Psi,Psi_x,_,_ = append_const_basis(Xi,Psi,Psi_x)
+        else:
+            Psi,Psi_x,_,_ = get_fourier(Xi,d)
+
+    for i in np.arange(Psi_x.shape[1]):
+        K = K + beta_final[i] * np.reshape(Psi_x[:,i],(-1,1))
+        K_be = K_be + beta_final_be[i] * np.reshape(Psi_x[:,i],(-1,1))
+
+    if diag == 1:
+        plt.figure(figsize = parameters.figure_size)
+        ax1 = sns.distplot(Phi, label = 'Langevin')
+        ax1.plot(X,p_x(X),'--',label ='$\\rho(x)$')
+        ax1.legend(framealpha=0)
+        plt.title('Histogram of Langevin samples vs $\\rho(x)$')
+        plt.show()
+    
+        
+        plt.figure(figsize = parameters.figure_size)
+        plt.plot(Xi, Psi,'*')
+        plt.title('Basis funtions')
+        plt.show()
+        
+        plt.figure(figsize = parameters.figure_size)
+        plt.plot(Xi, Psi_x,'^')
+        plt.title('Basis derivatives')
+        plt.show()
+        
+        fig,axes = plt.subplots(nrows = d, ncols = 1,figsize=(8,d*8), sharex ='all')
+        for i in np.arange(d):
+            axes[i].plot(np.arange(T), beta_td[:,i],label = '$\\theta_{}$'.format(i))
+            axes[i].legend(framealpha=0)
+        plt.show()
+
+        
+    end = timer()
+    print('Time taken for gain_diff_td()' , end - start)
+    
+    return K,K_be,Phi
         
     

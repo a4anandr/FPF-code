@@ -12,6 +12,8 @@ import math
 from scipy import spatial
 from scipy import stats
 
+from sklearn.neighbors import KernelDensity
+
 import pandas as pd
 
 import collections
@@ -47,6 +49,8 @@ if __name__ == '__main__':
     print('Seed ',fp.seed)
     Xi = fpf.get_samples(fp.N,fp.mu,fp.sigma,fp.w,fp.d, seed = fp.seed)
     
+    domain = np.arange(-3,3,0.1)
+
     Ts = int(fp.T/fp.dt)   # Total number of time steps of filtering
     ts = np.arange(Ts)
     # Initializing all the Monte Carlo methods with these particles from the prior 
@@ -82,6 +86,7 @@ if __name__ == '__main__':
         Xi_sis[:,0] = Xi.reshape(-1)
         Zi_sis = np.zeros((fp.N,Ts))
         N_eff_sis = np.zeros((fp.N,1))
+        p_sis = np.zeros((len(domain),Ts))
         
     if fp.kalman  == 1: 
         Xi_kalman = np.zeros((1,Ts))
@@ -126,9 +131,10 @@ if __name__ == '__main__':
         if fp.exact == 1:
             C = fp.c_x(Xi_exact[:,[k-1]])
             dI_exact[:,[k]] = dZ[:,[k]] - 0.5 * (C + np.mean(C)) * fp.dt 
-            K_exact[:,[k]] = fpf.gain_num_integrate(Xi_exact[:,[k-1]], fp.c, p, fp.x)
+            K_exact[:,[k]] = fpf.gain_num_integrate(Xi_exact[:,[k-1]], fp.c, p, fp.x).reshape(-1,1)
             Xi_exact[:,[k]] = Xi_exact[:,[k-1]] + fp.a_x(Xi_exact[:,[k-1]]) * fp.dt + fp.sigmaB * fp.sdt * common_rand + (1/fp.sigmaW**2) * K_exact[:,[k]] * dI_exact[:,[k]]
-            p   = get_kernel_pdf(Xi_exact[:,[k]])
+            p   = fpf.get_kernel_pdf(Xi_exact[:,[k]], domain, sym=1)
+            
         #%% RKHS implementation
         if fp.rkhs_N == 1:
             C = fp.c_x(Xi_rkhs[:,[k-1]])
@@ -168,29 +174,41 @@ if __name__ == '__main__':
             # Deterministic resampling - as given in Budhiraja et al.
             if fp.resampling == 1:
                 N_eff = np.zeros((fp.N,1))
+                wi_res = np.zeros((fp.N,1))
+                Xi_sis_new = np.zeros((fp.N,1))
                 if np.mod(k,3)== 0:
                     sum_N_eff = 0
                     wi_cdf    = np.zeros((fp.N,1))
                     for i in np.arange(fp.N):
                         N_eff[i] = np.floor(wi_sis[i,[k]] *  fp.N) 
                         wi_res[i]= wi_sis[i,[k]] - N_eff[i]/ fp.N
-                        if i == 1:
+                        if i == 0:
                             wi_cdf[i]= wi_res[i]
                         else:
                             wi_cdf[i]= wi_cdf[i-1] + wi_res[i]
                         if N_eff[i] > 0:
-                            Xi_sis_new[sum_N_eff + 1 : sum_N_eff + N_eff(i),:] = np.repmat(Xi_sis[:,[k]],N_eff(i),1)
-                        sum_N_eff = sum_N_eff + N_eff(i)
-                    N_res = N - sum_N_eff
+                            Xi_sis_new[int(sum_N_eff): int(sum_N_eff + N_eff[i]),:] = np.repeat(Xi_sis[i,k],int(N_eff[i]), axis = 0).reshape((-1,1))
+                        sum_N_eff = sum_N_eff + N_eff[i]
+                    N_res = fp.N - sum_N_eff
                     wi_cdf = wi_cdf / np.sum(wi_res)
-                    wi_res = wi_res / np.sum(wi_res)  
+                    wi_res = wi_res / np.sum(wi_res) 
+                    
                     for j in np.arange(N_res):
-                        r = rand
-                        for i in np.arange(N):
+                        r = np.random.rand()
+                        for i in np.arange(fp.N):
                             if (r < wi_cdf[i]):
-                                Xi_sis_new [sum_N_eff + j,:] = Xi_sis[:,[k]]
-                    Xi_sis[k,:]  = Xi_sis_new
-                    wi_sis[:,[k]]  = (1/fp.N) * np.ones((1,N))
+                                Xi_sis_new[int(sum_N_eff+j),:] = Xi_sis[i,[k]]
+                    Xi_sis[:,[k]]  = Xi_sis_new
+                    wi_sis[:,k]  = (1/fp.N) * np.ones((1,fp.N)) 
+                
+#                kde = stats.gaussian_kde(Xi_sis[:,k],weights = wi_sis[:,k])
+#                p_sis[:,k] = kde.pdf(domain)              
+#                kde = KernelDensity(bandwidth=1.0, kernel='gaussian')
+#                kde.fit(Xi_sis[:,[k]])
+#                ## score_samples returns the log of the probability density
+#                logprob = kde.score_samples(domain.reshape(-1,1))
+#                p_sis[:,k] = np.exp(logprob)
+                p_sis[:,k] = fpf.get_kernel_pdf(Xi_sis[:,[k]], wi_sis[:,k], domain, sym = 0)
             # N_eff_sis[k] = 1 / (np.sum(wi_sis[:,[k]]**2))
     #%% Various plots
     fig1,ax1 = plt.subplots(figsize = (15,8))
@@ -200,27 +218,36 @@ if __name__ == '__main__':
     plt.plot(ts, np.squeeze(Z,axis=0), label = 'Output')
         
     fig2, ax = plt.subplots(nrows=1, ncols =3, figsize = (15,8), sharex =True, sharey = True)
-    if fp.const == 1:
-        sns.distplot(Xi_const[:,0], color= 'r',label = 'Const', ax =ax[0])
-        ax1.plot(ts,np.mean(Xi_const,axis=0), 'r', label='Const')
-        sns.distplot(Xi_const[:,99],color ='r',label = 'Const', ax = ax[1])
-        sns.distplot(Xi_const[:,199],color = 'r',label = 'Const', ax = ax[2])
-    if fp.kalman == 1:
-        domain = np.arange(-3,3,0.1)
-        ax[0].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,0], scale =P_kalman[:,0]), 'g', label = 'EKF')
-        ax1.plot(ts,np.squeeze(Xi_kalman,axis=0), color='g', label ='EKF')
-        ax[1].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,99], scale =P_kalman[:,99]), 'g', label ='EKF')
-        ax[2].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,199], scale = P_kalman[:,199]), 'b', label = 'EKF')
+    if fp.coif == 1:
+        sns.distplot(Xi_coif[:,0],label = 'Markov semigroup', ax = ax[0])
+        ax1.plot(ts,np.mean(Xi_coif,axis=0), label ='Markov semigroup')
+        sns.distplot(Xi_coif[:,99], label = 'Markov semigroup', ax = ax[1])
+        sns.distplot(Xi_coif[:,199], label = 'Markov semigroup', ax = ax[2])
+    if fp.rkhs_N == 1:
+        sns.distplot(Xi_rkhs[:,0], label = 'RKHS', ax = ax[0])
+        ax1.plot(ts,np.mean(Xi_rkhs,axis=0), label ='RKHS')
+        sns.distplot(Xi_rkhs[:,99], label = 'RKHS', ax = ax[1])
+        sns.distplot(Xi_rkhs[:,199], label = 'RKHS', ax = ax[2])
     if fp.om == 1:
-        sns.distplot(Xi_om[:,0], color = 'b', label = 'RKHS OM', ax = ax[0])
-        ax1.plot(ts,np.mean(Xi_om,axis=0), 'b', label ='RKHS OM')
-        sns.distplot(Xi_om[:,99],color ='b', label = 'RKHS OM', ax = ax[1])
-        sns.distplot(Xi_om[:,199],color = 'b', label = 'RKHS OM', ax = ax[2])
+        sns.distplot(Xi_om[:,0], label = 'RKHS OM', ax = ax[0])
+        ax1.plot(ts,np.mean(Xi_om,axis=0), label ='RKHS OM')
+        sns.distplot(Xi_om[:,99], label = 'RKHS OM', ax = ax[1])
+        sns.distplot(Xi_om[:,199],label = 'RKHS OM', ax = ax[2])
+    if fp.const == 1:
+        sns.distplot(Xi_const[:,0], label = 'Const', ax =ax[0])
+        ax1.plot(ts,np.mean(Xi_const,axis=0), label='Const')
+        sns.distplot(Xi_const[:,99],label = 'Const', ax = ax[1])
+        sns.distplot(Xi_const[:,199],label = 'Const', ax = ax[2])
+    if fp.kalman == 1:
+        ax[0].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,0], scale =P_kalman[:,0]), label = 'EKF')
+        ax1.plot(ts,np.squeeze(Xi_kalman,axis=0), label ='EKF')
+        ax[1].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,99], scale =P_kalman[:,99]),  label ='EKF')
+        ax[2].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,199], scale = P_kalman[:,199]), label = 'EKF')
     if fp.sis == 1:
-        # sns.distplot(Xi_sis[:,0], color = 'b', label = 'RKHS OM', ax = ax[0])
-        ax1.plot(ts,np.sum(wi_sis * Xi_sis,axis=0), 'b', label ='SIS PF')
-        sns.distplot(Xi_om[:,99],color ='b', label = 'RKHS OM', ax = ax[1])
-        sns.distplot(Xi_om[:,199],color = 'b', label = 'RKHS OM', ax = ax[2])
+        #ax[0].plot(domain, p_sis[:,0], label = 'SIS PF')
+        ax1.plot(ts,np.sum(wi_sis * Xi_sis,axis=0), label ='SIS PF')
+        #ax[1].plot(domain, p_sis[:,99], label = 'SIS PF')
+        #ax[2].plot(domain, p_sis[:,199],label = 'SIS PF')
     ax1.legend(loc = 0, framealpha = 0)
     
     ax[0].text(0.05,0.95,'$t=0$', fontsize = '18', transform = ax[0].transAxes, verticalalignment='top')

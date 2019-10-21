@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 
 import parameters
+import filtering_params as fp
 
 matplotlib.rc('text',usetex = True)
 matplotlib.rc('font', **parameters.font)
@@ -184,12 +185,23 @@ def append_const_basis(Xi,Psi,Psi_x,Psi_2x = np.zeros(1), Psi_3x = np.zeros(1)):
 # get_kernel_pdf() - To construct a pdf using kernel density estimation from a given set of samples Xi
 #                     symbolic computation, very expensive
 # =======================================================================================
-def get_kernel_pdf(Xi, bw = 0.1):
-    x = symbols('x0:%d'%1)
+def get_kernel_pdf(Xi, X, wi = (1/fp.N)*np.ones(fp.N), bw = 0.1, sym=0):
     N = Xi.shape[0]
-    p = 0
+    if sym == 1:
+        p = 0
+        x = symbols('x0:%d'%1)
+        for i in np.arange(N):
+            p = p + (wi[i] * np.sqrt(2 * np.pi * bw**2)) * exp(-(x[0] - Xi[i])**2/ (2 * np.pi * bw**2))
+    else:
+        p = np.zeros(X.shape)
+        for i in np.arange(N):
+            p = p + (wi[i] * np.sqrt(2 * np.pi * bw**2)) * np.exp(-(X - Xi[i])**2/ (2 * np.pi * bw**2))
+    return p
+
+def get_p(Xi, wi = (1/fp.N)*np.ones(fp.N), bw = 0.1, sym=0):
+    N = Xi.shape[0]
     for i in np.arange(N):
-        p = p + (1/ N * np.sqrt(2 * np.pi * bw**2)) * exp(-(x[0] - Xi[i])**2/ (2 * np.pi * bw**2))
+        p = p + (wi[i] * np.sqrt(2 * np.pi * bw**2)) * np.exp(-(x - Xi[i])**2/ (2 * np.pi * bw**2))
     return p
 
 #%% Different gain approximation algorithms
@@ -235,14 +247,14 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
         Psi,Psi_x = get_poly(Phi,d)
     elif basis == 'fourier':
         if affine.lower() == 'y':
-            Psi,Psi_x = get_fourier(Phi,d-1)
-            Psi,Psi_x = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
+            Psi,Psi_x,_,_ = get_fourier(Phi,d-1)
+            Psi,Psi_x,_,_ = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
         else:
-            Psi,Psi_x = get_fourier(Phi,d)
+            Psi,Psi_x,_,_ = get_fourier(Phi,d)
     elif basis == 'weighted':
         if affine.lower() == 'y':
             Psi,Psi_x = get_weighted_poly(Phi,d-1,mu,sigma)
-            Psi,Psi_x = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
+            Psi,Psi_x,_,_ = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
         else:
             Psi,Psi_x = get_weighted_poly(Phi,d,mu,sigma)
     
@@ -261,14 +273,14 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
         Psi,Psi_x = get_poly(Xi,d)
     elif basis == 'fourier':
         if affine.lower() == 'y':
-            Psi,Psi_x = get_fourier(Xi,d-1)
-            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+            Psi,Psi_x,_,_ = get_fourier(Xi,d-1)
+            Psi,Psi_x,_,_ = append_const_basis(Xi,Psi,Psi_x)
         else:
-            Psi,Psi_x = get_fourier(Xi,d)
+            Psi,Psi_x,_,_ = get_fourier(Xi,d)
     elif basis == 'weighted':
         if affine.lower() == 'y':
-            Psi,Psi_x = get_weighted_poly(Xi,d-1,mu,sigma)
-            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+            Psi,Psi_x= get_weighted_poly(Xi,d-1,mu,sigma)
+            Psi,Psi_x,_,_= append_const_basis(Xi,Psi,Psi_x)
         else:
             Psi,Psi_x = get_weighted_poly(Xi,d,mu,sigma)
 
@@ -283,7 +295,6 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
         plt.title('Histogram of Langevin samples vs $\\rho(x)$')
         plt.show()
     
-        
         plt.figure(figsize = parameters.figure_size)
         plt.plot(Xi, Psi,'*')
         plt.title('Basis funtions')
@@ -300,7 +311,6 @@ def gain_diff_td(Xi, c, w, mu, sigma, p, x, d, basis, affine, T, diag = 0):
             axes[i].legend(framealpha=0)
         plt.show()
 
-        
     end = timer()
     print('Time taken for gain_diff_td()' , end - start)
     
@@ -348,14 +358,14 @@ def gain_diff_td_sa(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
         Psi,Psi_x = get_poly(Phi,d)
     elif basis == 'fourier':
         if affine.lower() == 'y':
-            Psi,Psi_x = get_fourier(Phi,d-1)
-            Psi,Psi_x = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
+            Psi,Psi_x,_,_ = get_fourier(Phi,d-1)
+            Psi,Psi_x,_,_ = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
         else:
-            Psi,Psi_x = get_fourier(Phi,d)
+            Psi,Psi_x,_,_ = get_fourier(Phi,d)
     elif basis == 'weighted':
         if affine.lower() == 'y':
             Psi,Psi_x = get_weighted_poly(Phi,d-1,mu,sigma)
-            Psi,Psi_x = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
+            Psi,Psi_x,_,_ = append_const_basis(np.expand_dims(Phi,axis=1),Psi,Psi_x)
         else:
             Psi,Psi_x = get_weighted_poly(Phi,d,mu,sigma)
     
@@ -375,14 +385,14 @@ def gain_diff_td_sa(Xi, c, w, mu, sigma, p, x, d, basis, affine, diag = 0):
         Psi,Psi_x = get_poly(Xi,d)
     elif basis == 'fourier':
         if affine.lower() == 'y':
-            Psi,Psi_x = get_fourier(Xi,d-1)
-            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+            Psi,Psi_x,_,_ = get_fourier(Xi,d-1)
+            Psi,Psi_x,_,_ = append_const_basis(Xi,Psi,Psi_x)
         else:
             Psi,Psi_x = get_fourier(Xi,d)
     elif basis == 'weighted':
         if affine.lower() == 'y':
             Psi,Psi_x = get_weighted_poly(Xi,d-1,mu,sigma)
-            Psi,Psi_x = append_const_basis(Xi,Psi,Psi_x)
+            Psi,Psi_x,_,_ = append_const_basis(Xi,Psi,Psi_x)
         else:
             Psi,Psi_x = get_weighted_poly(Xi,d,mu,sigma)
 
@@ -539,13 +549,13 @@ def gain_finite_integrate(c_x, w, mu, sigma, d, basis, affine, diag = 0):
     if basis == 'poly':
         Psi,Psi_x = get_poly(X, d)
     elif basis == 'fourier':
-        Psi,Psi_x = get_fourier(X, d)
+        Psi,Psi_x,_,_ = get_fourier(X, d)
         if affine.lower() == 'y':
-            Psi,Psi_x = append_const_basis(X, Psi, Psi_x) 
+            Psi,Psi_x,_,_ = append_const_basis(X, Psi, Psi_x) 
     elif basis == 'weighted':
         Psi,Psi_x = get_weighted_poly(X,d, mu,sigma)
         if affine.lower() == 'y':
-            Psi,Psi_x = append_const_basis(X, Psi, Psi_x)
+            Psi,Psi_x,_,_ = append_const_basis(X, Psi, Psi_x)
              
     eta = np.mean(c_x(X)* p)
     Y = c_x(X) -eta
@@ -592,13 +602,13 @@ def gain_finite(Xi, C, mu, sigma, d, basis, affine, diag = 0):
     if basis == 'poly':
         Psi,Psi_x = get_poly(Xi, d)
     elif basis == 'fourier':
-        Psi,Psi_x = get_fourier(Xi, d)
+        Psi,Psi_x,_,_ = get_fourier(Xi, d)
         if affine.lower() == 'y':
-            Psi,Psi_x = append_const_basis(Xi, Psi, Psi_x) 
+            Psi,Psi_x,_,_ = append_const_basis(Xi, Psi, Psi_x) 
     elif basis == 'weighted':
         Psi,Psi_x = get_weighted_poly(Xi,d, mu,sigma)
         if affine.lower() == 'y':
-            Psi,Psi_x = append_const_basis(Xi, Psi, Psi_x)
+            Psi,Psi_x,_,_ = append_const_basis(Xi, Psi, Psi_x)
             
     eta = np.mean(C)
     Y = (C -eta)
@@ -778,25 +788,24 @@ def gain_rkhs_N(Xi, C, epsilon, Lambda, diag = 0):
         
         Ker = np.exp(- squareform(pdist(Xi,'euclidean'))**2/ (4 * epsilon))    
         for i in range(N):
-            for j in range(N):
-                Ker_x[i,j,:] = -(Xi[i,:]-Xi[j,:]) * Ker[i,j] / (2 * epsilon)
-        
+            Ker_x[i,:,:] = np.multiply(-(Xi[i,:]-Xi) ,Ker[i,:].reshape((-1,1))) / (2 * epsilon)
+        Ker_x = Ker_x.astype(np.float32)
+
         eta = np.mean(C)
         Y = (C -eta)
         
         b_N = (1/ N) * np.dot(Ker,Y)
-        for d in np.arange(dim):
-            Ker_x_sum+= np.dot(Ker_x[:,:,d], Ker_x[:,:,d].transpose())
+        Ker_x_sum = np.array([np.dot(Ker_x[:,:,d_i], Ker_x[:,:,d_i].transpose()) for d_i in np.arange(dim)]).sum(axis =0)
         M_N = Lambda * Ker + (1/ N) * Ker_x_sum
-        if(np.linalg.det(M_N)!=0):
-            beta_N = np.linalg.solve(M_N,b_N)
-        else:
-            beta_N = np.linalg.lstsq(M_N,b_N)[0]
-            
-        for i in range(N):
-            for j in range(N):
-                K[i,:] = K[i,:] + beta_N[j] * Ker_x[i,j,:]
-                
+        
+        # if(np.linalg.det(M_N)!=0):
+        beta_N = np.linalg.solve(M_N,b_N)
+#        else:
+#            beta_N = np.linalg.lstsq(M_N,b_N)[0]
+        K  = K + np.dot(beta_N.reshape((-1,1)).transpose(), Ker_x)
+        K  = np.squeeze(K)  
+        K  = K.reshape((K.shape[0],dim))
+        
         if diag == 1:
             plt.figure(figsize = parameters.figure_size)
             plt.plot(Xi, Ker[:,100],'r*')
@@ -807,7 +816,7 @@ def gain_rkhs_N(Xi, C, epsilon, Lambda, diag = 0):
         print('Time taken for gain_rkhs_N()' , end - start)
         
         return K, beta_N
-
+    
 # =============================================================================
 #%% ### gain_exact() - Function to compute the exact FPF gain by numerical integration
 # Algorithm
@@ -867,6 +876,30 @@ def gain_num_integrate(Xi, c, p, x, d=0, int_lim = [-np.inf, np.inf]):
     end = timer()
     print('Time taken for gain_num_integrate()' , end - start)
     return K
+
+#%% Non symbolic computation
+#def gain_num_integrate2(Xi, c_x, p_x, d=0, int_lim = [-np.inf, np.inf]):
+#    start = timer()
+#    
+#    N = len(Xi)
+#    K = np.zeros(N)
+#    integral = np.zeros(N)
+#    c_hat = np.mean(c_x(Xi))
+#    integrand_x = lambda x: p_x * (c_x - c_hat) , 'numpy')
+#    integrand = lambda x: integrand_x(x)
+#   
+#    for i in range(N):
+#        if Xi.shape[1] == 1:
+#            integral[i] = integrate.quad( integrand, int_lim[0], Xi[i])[0]
+#            K[i] = - integral[i]/ p_x(Xi[i])
+#        else:
+#            integral[i] = integrate.quad( integrand, int_lim[0], Xi[i,d])[0]
+#            K[i] = - integral[i]/ p_x(Xi[i,d])
+#    # K = np.reshape(K,(N,1))
+#    
+#    end = timer()
+#    print('Time taken for gain_num_integrate()' , end - start)
+#    return K
 
 # =============================================================================
 #%% ### gain_coif() - Function to approximate FPF gain using Markov kernel approx. method -

@@ -11,6 +11,7 @@ import numpy as np
 from sympy import *
 import math
 from scipy import spatial
+import seaborn as sns
 
 import fpf_module as fpf
 import parameters
@@ -95,7 +96,7 @@ if __name__ == '__main__':
                     print('No. particles ',N)
                     print('Run ',run)
                     if No_runs > 1:
-                        seed = np.random.randint(1,500)
+                        seed = np.random.randint(1,1000)
                     else:
                         seed = parameters.seed # np.random.randint(1,500)
                     print('Seed ', seed)
@@ -116,13 +117,13 @@ if __name__ == '__main__':
                     
                     if parameters.diff_td == 1:
                         if d == 1:
-                            K_diff_td,_ = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, parameters.T_values[2], diag = 1)
+                            K_diff_td,_ = fpf.gain_diff_td(Xi, c, parameters.w_b, parameters.mu_b, parameters.sigma_b, p_b, x, parameters.basis_dim, parameters.basis, parameters.affine, parameters.T_values[0], diag = 0)
                         if parameters.exact == 1:
                             mse_diff_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_td)
                             
                     if parameters.diff_nl_td == 1:
                         if d ==1:
-                            K_diff_nl_td,_ = fpf.gain_diff_nl_td(Xi, c, p_b, x, 9, parameters.nlbasis, parameters.T_values[2], diag = 1)
+                            K_diff_nl_td,_ = fpf.gain_diff_nl_td(Xi, c, p_b, x, 9, parameters.nlbasis, parameters.T_values[0], diag = 0)
                         if parameters.exact == 1:
                             mse_diff_nl_td[run,i,n] = fpf.mean_squared_error(K_exact, K_diff_nl_td)
 
@@ -133,20 +134,20 @@ if __name__ == '__main__':
                                 knn = spatial.KDTree(X.reshape((len(X),1)))
                                 K_finite = K_finite_X[knn.query(Xi)[1]].reshape(N,1)
                             else:
-                                K_finite  = fpf.gain_finite(Xi, C, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag =1)
+                                K_finite  = fpf.gain_finite(Xi, C, parameters.mu_b, parameters.sigma_b, parameters.basis_dim, parameters.basis, parameters.affine, diag =0)
                             if parameters.exact == 1:
                                 mse_finite[run,i,n] = fpf.mean_squared_error(K_exact, K_finite)
                                 
                     if parameters.coif ==1:
                         eps_coif = hyperparams_coif_dict[d][N] if d in hyperparams_coif_dict and N in hyperparams_coif_dict[d] else 1
                         Phi = np.zeros(N)
-                        K_coif = fpf.gain_coif(Xi, C, eps_coif, Phi, diag = 0)
+                        K_coif,_ = fpf.gain_coif(Xi, C, eps_coif, Phi, diag = 0)
                         if parameters.exact == 1:
                             mse_coif[run,i,n] = fpf.mean_squared_error(K_exact, K_coif)
     
                     if parameters.rkhs_N == 1:
-                        eps_rkhs_N =0.5
-                        Lambda_rkhs_N = 10**(-3)
+                        eps_rkhs_N = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
+                        Lambda_rkhs_N = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                         K_rkhs_N,_ = fpf.gain_rkhs_N(Xi, C, eps_rkhs_N, Lambda_rkhs_N, diag = 0)
                         if parameters.exact == 1:
                             mse_rkhs_N[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_N)
@@ -291,3 +292,18 @@ if __name__ == '__main__':
             plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $N=$ '+ str(N))
             plt.show()
             fig.savefig('Figure/logMSEvdforN'+str(N)+'.jpg')
+            
+#        fig,ax = plt.subplots(nrows = 1, ncols = 2, sharey = True, figsize = (24,8))
+#        sns.distplot(mse_finite_final, ax = ax[0], label = 'Finite basis')
+#        sns.distplot(mse_rkhs_N_final, ax = ax[0], label = 'RKHS-simplified')
+#        sns.distplot(mse_rkhs_dN_final, ax = ax[0], label = 'RKHS-optimal')
+#        sns.distplot(mse_coif_final, ax = ax[0], label = 'Markov semigroup approx.')
+#        sns.distplot(mse_om_final, ax = ax[0], label = 'RKHS OM')
+#        ax[0].legend(loc = 0, framealpha = 0, fontsize = 24)
+#        ax[0].set_xlabel('$x$')
+#        
+#        sns.distplot(mse_diff_td_final, ax = ax[1], label = r'$\nabla-TD$')
+#        sns.distplot(mse_const_final, ax = ax[1], label = 'Const')
+#        ax[1].legend(loc =0, framealpha =0, fontsize = 24)
+#        ax[1].set_xlabel('$x$')
+#        

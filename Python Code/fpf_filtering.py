@@ -117,8 +117,8 @@ if __name__ == '__main__':
 
     for k in np.arange(1,Ts):
         print('Time ',k)
-        # X[:,k] = X[:,k-1] + fp.a_x(X[:,k-1]) * fp.dt + fp.sigmaB * fp.sdt * np.random.randn()
-        X[:,k] = X[:,k-1]
+        X[:,k] = X[:,k-1] + fp.a_x(X[:,k-1]) * fp.dt + fp.sigmaB * fp.sdt * np.random.randn()
+        # X[:,k] = X[:,k-1]
         Z[:,k] = Z[:,k-1] + fp.c_x(X[:,k]) * fp.dt + fp.sigmaW * fp.sdt * np.random.randn()
         if k == 1:
             dZ[:,k] = Z[:,k] - Z[:,k-1]
@@ -208,7 +208,7 @@ if __name__ == '__main__':
 #                ## score_samples returns the log of the probability density
 #                logprob = kde.score_samples(domain.reshape(-1,1))
 #                p_sis[:,k] = np.exp(logprob)
-                p_sis[:,k] = fpf.get_kernel_pdf(Xi_sis[:,[k]], wi_sis[:,k], domain, sym = 0)
+#                p_sis[:,k] = fpf.get_kernel_pdf(Xi_sis[:,[k]], wi_sis[:,k], domain, sym = 0)
             # N_eff_sis[k] = 1 / (np.sum(wi_sis[:,[k]]**2))
     #%% Various plots
     fig1,ax1 = plt.subplots(figsize = (15,8))
@@ -217,32 +217,39 @@ if __name__ == '__main__':
     plt.figure(figsize= (15,8))
     plt.plot(ts, np.squeeze(Z,axis=0), label = 'Output')
         
-    fig2, ax = plt.subplots(nrows=1, ncols =3, figsize = (15,8), sharex =True, sharey = True)
+    ts_compare = np.array([0,150,300])
+    fig2, ax = plt.subplots(nrows=1, ncols =3, figsize = (15,8), sharex =False, sharey = True)
+    
+    fig_particles, ax_part = plt.subplots(nrows = 1, ncols = 3, sharex= True, sharey = True, figsize = (15,8))
+
     if fp.coif == 1:
-        sns.distplot(Xi_coif[:,0],label = 'Markov semigroup', ax = ax[0])
+        sns.distplot(Xi_coif[:,ts_compare[0]],label = 'Markov semigroup', ax = ax[0])
         ax1.plot(ts,np.mean(Xi_coif,axis=0), label ='Markov semigroup')
-        sns.distplot(Xi_coif[:,99], label = 'Markov semigroup', ax = ax[1])
-        sns.distplot(Xi_coif[:,199], label = 'Markov semigroup', ax = ax[2])
+        sns.distplot(Xi_coif[:,ts_compare[1]], label = 'Markov semigroup', ax = ax[1])
+        sns.distplot(Xi_coif[:,ts_compare[2]], label = 'Markov semigroup', ax = ax[2])
+        ax_part[0].plot(ts,Xi_coif[::5,:].T, color = 'r', label ='Markov semigroup')
     if fp.rkhs_N == 1:
-        sns.distplot(Xi_rkhs[:,0], label = 'RKHS', ax = ax[0])
+        sns.distplot(Xi_rkhs[:,ts_compare[0]], label = 'RKHS', ax = ax[0])
         ax1.plot(ts,np.mean(Xi_rkhs,axis=0), label ='RKHS')
-        sns.distplot(Xi_rkhs[:,99], label = 'RKHS', ax = ax[1])
-        sns.distplot(Xi_rkhs[:,199], label = 'RKHS', ax = ax[2])
+        sns.distplot(Xi_rkhs[:,ts_compare[1]], label = 'RKHS', ax = ax[1])
+        sns.distplot(Xi_rkhs[:,ts_compare[2]], label = 'RKHS', ax = ax[2])
     if fp.om == 1:
-        sns.distplot(Xi_om[:,0], label = 'RKHS OM', ax = ax[0])
+        sns.distplot(Xi_om[:,ts_compare[0]], label = 'RKHS OM', ax = ax[0])
         ax1.plot(ts,np.mean(Xi_om,axis=0), label ='RKHS OM')
-        sns.distplot(Xi_om[:,99], label = 'RKHS OM', ax = ax[1])
-        sns.distplot(Xi_om[:,199],label = 'RKHS OM', ax = ax[2])
+        sns.distplot(Xi_om[:,ts_compare[1]], label = 'RKHS OM', ax = ax[1])
+        sns.distplot(Xi_om[:,ts_compare[2]],label = 'RKHS OM', ax = ax[2])
+        ax_part[1].plot(ts,Xi_om[::5,:].T,color = 'b', label='RKHS OM')
     if fp.const == 1:
-        sns.distplot(Xi_const[:,0], label = 'Const', ax =ax[0])
+        sns.distplot(Xi_const[:,ts_compare[0]], label = 'Const', ax =ax[0])
         ax1.plot(ts,np.mean(Xi_const,axis=0), label='Const')
-        sns.distplot(Xi_const[:,99],label = 'Const', ax = ax[1])
-        sns.distplot(Xi_const[:,199],label = 'Const', ax = ax[2])
+        sns.distplot(Xi_const[:,ts_compare[1]],label = 'Const', ax = ax[1])
+        sns.distplot(Xi_const[:,ts_compare[2]],label = 'Const', ax = ax[2])
+        ax_part[2].plot(ts,Xi_const[::5,:].T,color = 'b', label='Const')
     if fp.kalman == 1:
-        ax[0].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,0], scale =P_kalman[:,0]), label = 'EKF')
+        ax[0].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,ts_compare[0]], scale =P_kalman[:,ts_compare[0]]), label = 'EKF')
         ax1.plot(ts,np.squeeze(Xi_kalman,axis=0), label ='EKF')
-        ax[1].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,99], scale =P_kalman[:,99]),  label ='EKF')
-        ax[2].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,199], scale = P_kalman[:,199]), label = 'EKF')
+        ax[1].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,ts_compare[1]], scale =P_kalman[:,ts_compare[1]]),  label ='EKF')
+        ax[2].plot(domain,stats.norm.pdf(domain,loc = Xi_kalman[:,ts_compare[2]], scale = P_kalman[:,ts_compare[2]]), label = 'EKF')
     if fp.sis == 1:
         #ax[0].plot(domain, p_sis[:,0], label = 'SIS PF')
         ax1.plot(ts,np.sum(wi_sis * Xi_sis,axis=0), label ='SIS PF')
@@ -250,17 +257,19 @@ if __name__ == '__main__':
         #ax[2].plot(domain, p_sis[:,199],label = 'SIS PF')
     ax1.legend(loc = 0, framealpha = 0)
     
-    ax[0].text(0.05,0.95,'$t=0$', fontsize = '18', transform = ax[0].transAxes, verticalalignment='top')
+    ax[0].text(0.05,0.95,'$t={}$'.format(ts_compare[0]), fontsize = '18', transform = ax[0].transAxes, verticalalignment='top')
     # ax[0].legend(loc = 1, framealpha = 0)
     ax[0].set_ylabel(r'$\rho_t(x)$')
     
-    ax[1].text(0.05,0.95,'$t=1$',fontsize = '18',transform = ax[1].transAxes, verticalalignment='top')
-    # ax[1].legend(loc = 1, framealpha = 0)
+    ax[1].text(0.05,0.95,'$t={}$'.format(ts_compare[1]),fontsize = '18',transform = ax[1].transAxes, verticalalignment='top')
+    ax[1].legend(loc = 1, framealpha = 0)
     
-    ax[2].text(0.05,0.95,'$t=2$',fontsize = '18',transform = ax[2].transAxes, verticalalignment='top')
-    ax[2].legend(loc = 1, framealpha = 0)
+    ax[2].text(0.05,0.95,'$t={}$'.format(ts_compare[2]),fontsize = '18',transform = ax[2].transAxes, verticalalignment='top')
+    # ax[2].legend(loc = 1, framealpha = 0)
     plt.show()
     
+    ax_part[2].legend(loc =0, framealpha =0)
+    plt.show()
 #    plt.figure(figsize =(15,8))
 #    plt.plot(Xi_om[:,0], K_om[:,1],'*')
 #    plt.plot(Xi_om[:,89], K_om[:,90],'*')
@@ -277,3 +286,4 @@ if __name__ == '__main__':
 #plt.fill_between(x_d, np.exp(logprob), alpha=0.5)
 #plt.plot(x, np.full_like(x, -0.01), '|k', markeredgewidth=1)
 #plt.ylim(-0.02, 0.22)
+    

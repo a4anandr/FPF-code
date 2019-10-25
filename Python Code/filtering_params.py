@@ -18,9 +18,9 @@ figure_size = (21,8)
 d = 1
 x = symbols('x0:%d'%d)
 
-No_runs = 1 #100
+No_runs = 1
 
-seed = 463 # np.random.randint(1000) #304 (Good seed)
+seed = np.random.randint(1000) # 333,840(sigmaW=1), 672 (with sigmaW =0.3), 276, 603, #463 #304 (Good seed)
 
 #%% Flags to be set to choose which filtering methods to compare
 # fpf variants 
@@ -28,16 +28,16 @@ exact  = 0      # Computes the exact gain and plots
 diff_td = 0     # Computes the gain using diff TD algorithm using eligibility vectors
 diff_nl_td = 0  # Computes the gain using diff TD algorithm for nonlinear parameterization using Stochastic Approximation
 finite = 0      # Computes gain using finite set of basis functions
-coif   = 0      # Computes gain using Coifman kernel method
+coif   = 1      # Computes gain using Coifman kernel method
 rkhs_N = 0      # Computes gain using subspace of RKHS
 rkhs_dN= 0      # Computes optimal gain using RKHS 
-om     = 0      # Computes gain using RKHS enforcing constant gain constraint
+om     = 1      # Computes gain using RKHS enforcing constant gain constraint
 memory = 0      # Computes gain using RKHS with a memory parameter for previous gain
 om_mem = 0      # Computes gain using const gain approx and a memory parameter for previous gain
 coif_old = 0    # Computes old implementation of Coifman kernel approx. 
-const  = 0      # Computes the constant gain approximation
+const  = 1      # Computes the constant gain approximation
 
-kalman = 0      # Runs Kalman Filter for comparison
+kalman = 1      # Runs Kalman Filter for comparison
 
 sis    = 1      # Runs Sequential Importance Sampling Particle Filter 
 
@@ -63,11 +63,11 @@ coif_err_threshold = 1e-3
 coif_iterations = 1000
 
 # RKHS methods
-eps    = 0.25   # used as eps for Coif also
-Lambda = 1e-1
+eps    = 0.5   # 0.5 works well, 0.25 used as eps for Coif also
+Lambda = 1e-1   # 1e-1 works well
 
 #%% SIS PF
-resampling = 0
+resampling = 1
 
 #%% Filtering parameters
 # Filtering problem description
@@ -84,7 +84,7 @@ for m in np.arange(len(w)):
     p = p + w[m] * (1/ np.sqrt(2 * np.pi * sigma[m]**2))* exp(-(x[0] - mu[m])**2/ (2*sigma[m]**2))
 
 # Time steps
-T = 2
+T = 3.06
 dt = 0.01
 sdt = np.sqrt(dt)
 

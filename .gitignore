@@ -6,6 +6,7 @@ Figures/
 *.pdf
 *.pkl
 *.pyc
+Python Code/*.pyc
 Figures_multi/
 desktop.ini
 .DS_store

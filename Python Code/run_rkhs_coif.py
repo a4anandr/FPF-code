@@ -23,7 +23,7 @@ import parameters
 import matplotlib
 matplotlib.rc('text',usetex = True)
 matplotlib.rc('font', **parameters.font)
-# matplotlib.rcParams.update(parameters.font_params)
+#matplotlib.rcParams.update(parameters.font_params)
 
 import matplotlib.pyplot as plt
 # get_ipython().run_line_magic('matplotlib', 'auto')
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     
     No_runs = parameters.No_runs
     N_values = parameters.N_values
-    # d_values = parameters.d_values
+    d_values = parameters.d_values
     
     if os.path.isfile('input/Hyperparams_d_N_om.csv'):
             hyperparams_om = pd.read_csv('input/Hyperparams_d_N_om.csv')
@@ -76,9 +76,10 @@ if __name__ == '__main__':
     p_b_x = lambdify(x[0],p_b, 'numpy')
     gm = d     # No. of dimensions with Gaussian mixture densities in the dim-dimensional density, should be <= d
     
-    
+    #N = N_values[0]
     fig, ax = plt.subplots(nrows = 1, ncols = len(N_values), sharey = True, figsize = (21,8))
     for j,N in enumerate(N_values):
+    # for i,d in enumerate(d_values):
         n = parameters.N_values.index(N)
         for run in range(No_runs):
             print('Dimensions ', d)
@@ -87,7 +88,7 @@ if __name__ == '__main__':
             if No_runs > 1:
                 seed = np.random.randint(1,500)
             else:
-                seed = parameters.seed # np.random.randint(1,500)
+                seed = parameters.seed #np.random.randint(1,500)
             print('Seed ', seed)
             Xi  = fpf.get_samples(N, parameters.mu_b, parameters.sigma_b, parameters.w_b, d, gm, parameters.sigma, seed = seed)
 #            if d == 1:
@@ -116,8 +117,8 @@ if __name__ == '__main__':
             if parameters.coif ==1:
                 eps_coif = hyperparams_coif_dict[d][N] if d in hyperparams_coif_dict and N in hyperparams_coif_dict[d] else 1
                 Phi = np.zeros(N)
-                K_coif = fpf.gain_coif(Xi, C, eps_coif, Phi, diag = 0)
-                ax[j].plot(Xi[:,0], K_coif[:,0],'>', label = 'Markov semigroup')
+                K_coif,Phi = fpf.gain_coif(Xi, C, eps_coif, Phi, diag = 0)
+                ax[j].plot(Xi[:,0], K_coif[:,0],'>', label = 'Markov kernel')
                 if parameters.exact == 1:
                     mse_coif[run,i,n] = fpf.mean_squared_error(K_exact, K_coif)
 
@@ -125,7 +126,7 @@ if __name__ == '__main__':
                 eps_rkhs_N =hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
                 Lambda_rkhs_N = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                 K_rkhs_N, beta_N = fpf.gain_rkhs_N(Xi, C, eps_rkhs_N, Lambda_rkhs_N, diag = 0)
-                ax[j].plot(Xi[:,0], K_rkhs_N[:,0],'o', label = 'RKHS simplified - $N$')
+                ax[j].plot(Xi[:,0], K_rkhs_N[:,0],'o', label = r'$\nabla$-LSTD-RKHS-N')
                 if parameters.exact == 1:
                     mse_rkhs_N[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_N)
 
@@ -133,7 +134,7 @@ if __name__ == '__main__':
                 eps_rkhs_dN = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
                 Lambda_rkhs_dN = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                 K_rkhs_dN, beta_dN = fpf.gain_rkhs_dN(Xi, C, eps_rkhs_dN, Lambda_rkhs_dN, diag = 0)
-                ax[j].plot(Xi[:,0], K_rkhs_dN[:,0],'+', label = r'RKHS optimal - $ {} \times N$'.format(d+1))
+                ax[j].plot(Xi[:,0], K_rkhs_dN[:,0],'+', label = r'$\nabla$-LSTD-RKHS-{}N'.format(d+1))
                 if parameters.exact == 1:
                     mse_rkhs_dN[run,i,n] = fpf.mean_squared_error(K_exact, K_rkhs_dN)
 
@@ -141,7 +142,7 @@ if __name__ == '__main__':
                 eps_om = hyperparams_om_dict[d][N][0] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1
                 Lambda_om = hyperparams_om_dict[d][N][1] if d in hyperparams_om_dict and N in hyperparams_om_dict[d] else 1e-2
                 K_om, beta_om = fpf.gain_rkhs_om(Xi, C, eps_om, Lambda_om, diag = 0)
-                ax[j].plot(Xi[:,0], K_om[:,0],'>', label = 'RKHS OM')
+                ax[j].plot(Xi[:,0], K_om[:,0],'>', label = r'$\nabla$-LSTD-RKHS-OM')
                 if parameters.exact == 1:
                     mse_om[run,i,n] = fpf.mean_squared_error(K_exact, K_om)
             
@@ -154,12 +155,15 @@ if __name__ == '__main__':
                     mse_const[run,n] = fpf.mean_squared_error(K_exact, K_const)  
                     
             ax[j].set_ylim(-0.5,10)
-            ax[j].text(0.05, 0.95, '$N= {}$'.format(N), fontsize = 20, transform = ax[j].transAxes, verticalalignment='top')
-            ax[j].text(0.05, 0.90, '$d= {}$'.format(d), fontsize = 20, transform = ax[j].transAxes, verticalalignment='top')
-
+            ax[j].text(0.05, 0.95, '$N= {}$'.format(N), fontsize = 24, transform = ax[j].transAxes, verticalalignment='top')
+            ax[j].text(0.05, 0.90, '$d= {}$'.format(d), fontsize = 24, transform = ax[j].transAxes, verticalalignment='top')
+#            ax[j].set_xticklabels(fontsize= 24)
+#            ax[j].set_yticklabels(fontsize = 24)
+            ax[j].tick_params(labelsize = 24)
+            
             if j == 0:
-                ax[j].legend(loc = 1, framealpha = 0)
-                ax[j].set_ylabel('$\sf K_1(x)$')
+                ax[j].legend(loc = 1, fontsize = 24, framealpha = 0)
+                ax[j].set_ylabel('$\sf K(x)$', fontsize = 24)
             
             ax2 = ax[j].twinx()
             sns.distplot(Xi[:,0], label = 'Histogram of $x^i$')
@@ -168,25 +172,24 @@ if __name__ == '__main__':
             ax2.plot(domain,p_b_x(domain), 'k',label = '$\\rho_1(x)$')
             ax2.set_ylim(0,1)
             if j == 2:
-                ax2.set_ylabel('$\\rho(x)$')
+                ax2.set_ylabel('$\\rho(x)$', fontsize = 24)
+            ax2.tick_params(labelsize = 24)
             
-    ax2.legend(loc = 1, framealpha = 0)
+    ax2.legend(loc = 1, framealpha = 0, fontsize =24)._legend_box.align='right'
         
     fig2 = plt.figure(figsize = (10,6))
     if parameters.rkhs_N == 1:
-        plt.plot(Xi, beta_N, '*',label = r'$\beta^\circ_i$')
+        plt.plot(Xi, beta_N, 'C0*',label = r'$\beta^\circ_i$')
     if parameters.rkhs_dN == 1:
-        plt.plot(Xi, beta_dN.reshape((N,d+1))[:,0], 'o', label = r'$\beta^{0*}_i$')
-        plt.plot(Xi, beta_dN.reshape((N,d+1))[:,1], 'o', label = r'$\beta^{1*}_i$')
+        plt.plot(Xi, beta_dN.reshape((N,d+1))[:,0], 'C1o', label = r'$\beta^{0*}_i$')
+        plt.plot(Xi, beta_dN.reshape((N,d+1))[:,1], 'C1o', label = r'$\beta^{1*}_i$')
     if parameters.om == 1:
-        plt.plot(Xi, beta_om[0:N], '+', label = r'$\beta^{OM}_i$')
+        plt.plot(Xi, beta_om[0:N], 'C2+', label = r'$\beta^{OM}_i$')
     plt.ylim(-50,50)
     plt.legend(loc = 1 , framealpha = 0, ncol = 4)
     plt.xlabel('$x$')
-    plt.ylabel(r'$\log_{10}\beta_i$')
-    plt.title(r'Parameters $\{\beta_i\}$ from RKHS simplified, optimal and OM methods')
-    
-        fig2.savefig('Figure/Chap4_beta_comparison.pdf',bbox_inches='tight')
+    plt.ylabel(r'$\beta_i$')
+    fig2.savefig('Figure/Chap4_beta_comparison.pdf',bbox_inches='tight')
     # fig.savefig('Figure/Chap4_diff_td_linear_wt_polynomials.pdf',bbox_inches='tight')
 
                     

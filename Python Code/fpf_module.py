@@ -148,23 +148,23 @@ def subs_theta_nonlinear_basis(psi, psi_theta, theta, theta_val):
 def compute_Psi_gradient(theta,Phi, basis):
     d = len(theta)
     terms = 3
-    Psi = 0
-    Psi_theta = np.zeros(d)
+    Psi = np.zeros((len(Phi),1)) #0
+    Psi_theta = np.zeros((len(Phi),d))
     for term in np.arange(terms): 
         if basis == 1:
             Psi += theta[terms * term]/ (Phi**2 + theta[terms * term+1]* Phi + (theta[ terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))
-            Psi_theta[terms * term] = 1/ (Phi**2 + theta[terms * term+1]* Phi + (theta[ terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))
-            Psi_theta[terms * term+1] = - theta[terms * term] * (Phi + theta[terms * term+1]/2)/( Phi**2 + (theta [terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))**2
-            Psi_theta[terms * term+2] = - theta[terms * term] / (Phi**2 + (theta [terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))**2
+            Psi_theta[:,[terms * term]] = 1/ (Phi**2 + theta[terms * term+1]* Phi + (theta[ terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))
+            Psi_theta[:,[terms * term+1]] = - theta[terms * term] * (Phi + theta[terms * term+1]/2)/( Phi**2 + (theta [terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))**2
+            Psi_theta[:,[terms * term+2]] = - theta[terms * term] / (Phi**2 + (theta [terms * term+2] + ((theta[terms * term+1]**2)/4) + 1))**2
         else:
             Psi += theta[terms * term]/ ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )
-            Psi_theta[terms * term] = 1/ ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )
-            Psi_theta[terms * term+1] = 2 * theta[terms * term] * (Phi - theta[terms * term+1])/((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )**2
-            Psi_theta[terms * term+2] = - 2 * theta[terms * term] * theta[terms * term+2] / ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )**2
+            Psi_theta[:,[terms * term]] = 1/ ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )
+            Psi_theta[:,[terms * term+1]] = 2 * theta[terms * term] * (Phi - theta[terms * term+1])/((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )**2
+            Psi_theta[:,[terms * term+2]] = - 2 * theta[terms * term] * theta[terms * term+2] / ((Phi - theta[terms * term+1])**2 + theta[ terms * term+2]**2 )**2
     if parameters.affine.lower() == 'y':
-        Psi+= theta[d-1]
-        Psi_theta[d-1] = 1
-    Psi_theta = np.expand_dims(Psi_theta, axis=1)
+        Psi+= np.repeat(theta[d-1], len(Phi),axis=0).reshape(-1,1)
+        Psi_theta[:,[d-1]] = np.ones((len(Phi),1))
+    # Psi_theta = np.expand_dims(Psi_theta, axis=1)
     return Psi,Psi_theta
 
 # =============================================================================
@@ -459,6 +459,9 @@ def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     
     psi,psi_theta,theta = get_nonlinear_basis(d, x, basis)
     d = len(theta)
+#    if parameters.affine.lower() == 'y':
+#        d += 1
+        
     varphi = np.zeros((T,d))
     sa_term = np.zeros((T,d))
     # M = np.zeros((T,d,d))
@@ -466,7 +469,6 @@ def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     
     beta_td = np.zeros((T,d))
     beta_td[0,:] = np.random.rand(d)
-    Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,beta_td[0,:])
     if parameters.sa.lower() == 'polyak':
         sa_beta = 0.6
         const = 1
@@ -490,19 +492,22 @@ def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
 #        Psi_theta_x = lambdify(x[0],Psi_theta,'numpy')
 #        Psi_theta_Phi = np.expand_dims(np.array(Psi_theta_x(Phi[n-1])),axis=0)
              
-        Psi,Psi_theta = compute_Psi_gradient(beta_td[n-1,:],Phi[n-1], basis)
+        Psi,Psi_theta = compute_Psi_gradient(beta_td[n-1,:],Phi[[n-1]], basis)
         # Eligibility vector ODE discretization
         varphi[n,:] = varphi[n-1,:] + (- Uddot_x(Phi[n-1]) * varphi[n-1,:] + Psi_theta.reshape(-1)) * dt
+        # sa_term is the negative of the gradient
         sa_term[n,:] = (varphi[n-1,:] * cdot_x(Phi[n-1]) - Psi * Psi_theta.reshape(-1)) # Avoid dt, it might lower the gain and make asymptotic variance infinite. All SA theory is for disrete time
         sa_gain = (const/(n+1))**sa_beta
         if parameters.sa.lower() == 'snr':
             # M[n,:,:] = ((n-1)/n) * M[n-1,:,:] + (1/ n ) * Psi_theta.T * Psi_theta
-            # M = ((n-1)/n) * M + (1/n) * Psi_theta.T * Psi_theta
-            M = M - (1/(n+1)**beta_M) *( M  - Psi_theta.T * Psi_theta) * dt
+            M = ((n-1)/n) * M - (1/n) * Psi_theta.T * Psi_theta
+            # M = M - (1/((n+1) * dt)**beta_M) *( M  + Psi_theta.T * Psi_theta) * dt   # Psi_theta.T * Psi_theta is the Hessian
             beta_td[n,:] = beta_td[n-1,:] + sa_gain * np.linalg.solve(-M, sa_term[n,:].T).reshape(-1)
         else:
             beta_td[n,:] = beta_td[n-1,:] + sa_gain * sa_term[n,:]
-        beta_td[n,:] = np.minimum(np.maximum(beta_td[n,:],0),100)
+        # Projecting the parameters to lie betwen 0 and 100
+        # beta_td[n,:] = np.minimum(np.maximum(beta_td[n,:],0),100)
+        beta_td[n,:] = np.clip(beta_td[n,:],0,100)
     if parameters.sa.lower() == 'polyak':    
         beta_final = np.mean(beta_td, axis =0)
     else:   
@@ -511,6 +516,8 @@ def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     Psi,Psi_theta = subs_theta_nonlinear_basis(psi,psi_theta,theta,beta_final)
     Psi_x = lambdify(x[0],Psi,'numpy')
     K   = Psi_x(Xi)
+    
+#    K,Psi_theta = compute_Psi_gradient(beta_final, Xi, basis)
     
     if diag == 1:
         plt.figure(figsize = parameters.figure_size)
@@ -528,7 +535,7 @@ def gain_diff_nl_td(Xi, c, p, x, d, basis, T, diag = 0):
     end = timer()
     print('Time taken for gain_diff_nl_td()' , end - start)
     
-    return K,Phi
+    return K,Phi,beta_final
 # =============================================================================
 #%% ### gain_finite_integrate - Function to approximate the gain function with a finite set of basis
 # =============================================================================
@@ -878,28 +885,30 @@ def gain_num_integrate(Xi, c, p, x, d=0, int_lim = [-np.inf, np.inf]):
     return K
 
 #%% Non symbolic computation
-#def gain_num_integrate2(Xi, c_x, p_x, d=0, int_lim = [-np.inf, np.inf]):
-#    start = timer()
-#    
-#    N = len(Xi)
-#    K = np.zeros(N)
-#    integral = np.zeros(N)
-#    c_hat = np.mean(c_x(Xi))
-#    integrand_x = lambda x: p_x * (c_x - c_hat) , 'numpy')
-#    integrand = lambda x: integrand_x(x)
-#   
-#    for i in range(N):
-#        if Xi.shape[1] == 1:
-#            integral[i] = integrate.quad( integrand, int_lim[0], Xi[i])[0]
-#            K[i] = - integral[i]/ p_x(Xi[i])
-#        else:
-#            integral[i] = integrate.quad( integrand, int_lim[0], Xi[i,d])[0]
-#            K[i] = - integral[i]/ p_x(Xi[i,d])
-#    # K = np.reshape(K,(N,1))
-#    
-#    end = timer()
-#    print('Time taken for gain_num_integrate()' , end - start)
-#    return K
+def gain_num_integrate2(Xi, c_x, em_gmm):
+    start = timer()
+    
+    N = len(Xi)
+    K = np.zeros(N)
+    integral = np.zeros(N)
+    c_hat = np.mean(c_x(Xi))    
+    p = np.exp(em_gmm.score_samples(Xi))
+    
+    # domain = np.arange(-3,3,0.1)
+    # np.sum(c_x(domain) * p_x(domain) * 0.1)
+    
+    step = 0.1
+    xmax = np.max(Xi) + 3
+    
+    for i in np.arange(N):
+        integral[i] = 0
+        for xj in np.arange(Xi[i], xmax,  step):
+            integral[i] = integral[i] + np.exp(em_gmm.score_samples(xj.reshape(1,-1))) * ( c_x(xj) - c_hat) * step
+        K[i] = integral[i]/ p[i]
+            
+    end = timer()
+    print('Time taken for gain_num_integrate2' , end - start)
+    return K
 
 # =============================================================================
 #%% ### gain_coif() - Function to approximate FPF gain using Markov kernel approx. method -
@@ -1038,6 +1047,71 @@ def gain_coif_old(Xi, C, epsilon, Phi, No_iterations =50000, diag = 0):
 # \end{equation}
 # =============================================================================
 def gain_rkhs_om(Xi, C, epsilon, Lambda, diag = 0):
+    start = timer()
+    
+    N,dim = Xi.shape
+    K = np.zeros((N,dim))
+    Ker_x = np.array(np.zeros((N,N,dim)))
+    # Ker_xy = np.array(np.zeros((N,N)))
+    
+    Ker = np.exp(- squareform(pdist(Xi,'euclidean'))**2/ (4 * epsilon))
+    
+    for i in range(N):
+        Ker_x[i,:,:] = np.multiply(-(Xi[i,:]-Xi) ,Ker[i,:].reshape((-1,1))) / (2 * epsilon)
+            # Ker_xy[i,j] = (((Xi[i] - Xi[j])**2) / (2 * epsilon) -1) * Ker[i,j] / (2 * epsilon)
+    Ker_x = Ker_x.astype(np.float32)
+    Ker_x_ones = np.dot(np.transpose(Ker_x), np.ones((N,1)))
+
+    eta = np.mean(C)
+    Y = (C -eta)
+    
+    K_hat = np.mean(Y * Xi, axis = 0)
+
+    b_m = (2/ N) * np.dot(Ker,Y) - (2/ N) * np.dot( np.moveaxis(Ker_x_ones,0,2), K_hat) 
+    b_m = np.append(b_m, np.zeros((dim,1)))
+    
+    # Ker_x_sum = np.zeros((N,N))
+    # for d_i in range(dim):
+    Ker_x_sum = np.array([np.dot(Ker_x[:,:,d_i], Ker_x[:,:,d_i].transpose()) for d_i in np.arange(dim)]).sum(axis =0)
+    M_m = 2 * Lambda * Ker + (2 / N) * Ker_x_sum
+    M_m = np.vstack((M_m, (1/N) * np.squeeze(Ker_x_ones)))
+    M_m = np.hstack((M_m, np.append(np.squeeze(np.transpose(Ker_x_ones),axis =0),np.zeros((dim,dim)),axis =0))) #.reshape(len(M_m),1))
+#    if (np.linalg.det(M_m)!=0):
+    beta_m = np.linalg.solve(M_m,b_m)
+#    else:
+#        beta_m = np.linalg.lstsq(M_m,b_m)[0]
+
+    # K.fill(K_hat)
+    K  = np.tile(K_hat, (N,1))
+    K  = K + np.dot(beta_m[:-dim].reshape((-1,1)).transpose(), Ker_x)
+    K  = np.squeeze(K)  
+    K  = K.reshape((K.shape[0],dim))   
+    
+    if diag == 1:
+        plt.figure(figsize = parameters.figure_size)
+        plt.plot(Xi, Ker[:,0],'r*')
+        plt.plot(Xi, Ker_x[:,0], 'b*')
+        #plt.plot(Xi, Ker_xy[:,0],'k*')
+        plt.show()
+            
+    end = timer()
+    print('Time taken for gain_rkhs_om()' , end - start)
+    
+    return K,beta_m
+
+# =============================================================================
+#%% ### gain_rkhs_mem() - Function to approximate FPF gain using RKHS OM method - Adds a Lagrangian parameter $\mu$ to make use of the constant gain approximation
+# with memory from the previous instant Algorithm
+# 
+# $\beta^*$ obtained by solving the set of linear equations
+# \begin{equation}
+# \begin{aligned}
+# 0  &=  2 \Bigl(  \frac{1}{N}  \sum_{k=1}^d M_{x_k}^T M_{x_k}   +  \lambda M_0 \Bigr) \beta ^* + \frac{ \kappa \mu ^*}{N}+  \frac{2}{N} \Bigl( \kappa \text{K}^*  -   M_0 \tilde{c} \Bigr)  \\
+# 0  & = \kappa^{T} \beta^*
+# \end{aligned}
+# \end{equation}
+# =============================================================================
+def gain_rkhs_mem(Xi, C, epsilon, Lambda, diag = 0):
     start = timer()
     
     N,dim = Xi.shape

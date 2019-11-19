@@ -22,15 +22,15 @@ No_runs = 1;     % Total number of runs to compute the rmse metric for each of t
 
 %% Flags to be set to choose which methods to compare
 
-exact  = 1;      % Computes the exact gain and plots 
+exact  = 0;      % Computes the exact gain and plots 
 fin    = 1;      % Computes gain using finite dimensional basis
-coif   = 1;      % Computes gain using Coifman kernel method
+coif   = 0;      % Computes gain using Coifman kernel method
 rkhs   = 1;      % Computes gain using RKHS
-zero_mean = 0;   % Computes gain using RKHS enforcing constant gain constraint
+zero_mean = 1;   % Computes gain using RKHS enforcing constant gain constraint
 memory = 0;      % Computes gain using RKHS with a memory parameter for previous gain
 zm_mem = 1;      % Computes gain using const gain approx and a memory parameter for previous gain
 const  = 1;      % Computes the constant gain approximation
-kalman = 0;      % Runs Kalman Filter for comparison
+kalman = 1;      % Runs Kalman Filter for comparison
 sis    = 0;      % Runs Sequential Importance Sampling Particle Filter 
 
 %% FPF parameters
@@ -101,7 +101,7 @@ K_min = -100;
 
 %% Parameters corresponding to the state and observation processes
 % Run time parameters
-T   = 0.02;         % Total running time - Using same values as in Amir's CDC paper - 0.8
+T   = 1;         % Total running time - Using same values as in Amir's CDC paper - 0.8
 dt  = 0.01;      % Time increments for the SDE
 
 % State process parameters
@@ -128,7 +128,7 @@ sigmaW = 0.3;
 
 %% Parameters of the prior p(0) - 2 component Gaussian mixture density 
 m = 2;
-sigma = [0.4 0.4]; 
+sigma = [0.4472 0.4472]; 
 mu    = [-1 1]; 
 w     = [0.5 rand];  % Needs to add up to 1.
 w(m)  = 1 - sum(w(1:m-1));

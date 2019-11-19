@@ -20,15 +20,15 @@ x = symbols('x0:%d'%d)
 
 No_runs = 1
 
-seed = np.random.randint(1000) # 333,840(sigmaW=1), 672 (with sigmaW =0.3), 276, 603, #463 #304 (Good seed)
+seed = np.random.randint(1000) # 199, 333, 220, 840(sigmaW=1), 672 (with sigmaW =0.3), 276, 603, #463 #304 (Good seed)
 
 #%% Flags to be set to choose which filtering methods to compare
 # fpf variants 
-exact  = 0      # Computes the exact gain and plots 
+exact  = 1      # Computes the exact gain and plots 
 diff_td = 0     # Computes the gain using diff TD algorithm using eligibility vectors
 diff_nl_td = 0  # Computes the gain using diff TD algorithm for nonlinear parameterization using Stochastic Approximation
 finite = 0      # Computes gain using finite set of basis functions
-coif   = 1      # Computes gain using Coifman kernel method
+coif   = 0      # Computes gain using Coifman kernel method
 rkhs_N = 0      # Computes gain using subspace of RKHS
 rkhs_dN= 0      # Computes optimal gain using RKHS 
 om     = 1      # Computes gain using RKHS enforcing constant gain constraint
@@ -39,7 +39,7 @@ const  = 1      # Computes the constant gain approximation
 
 kalman = 1      # Runs Kalman Filter for comparison
 
-sis    = 1      # Runs Sequential Importance Sampling Particle Filter 
+sis    = 0      # Runs Sequential Importance Sampling Particle Filter 
 
 
 #%% Gain approximation parameters
@@ -61,13 +61,16 @@ K_min = -100
 # Markov semigroup
 coif_err_threshold = 1e-3
 coif_iterations = 1000
+eps_coif = 0.25
 
 # RKHS methods
-eps    = 0.5   # 0.5 works well, 0.25 used as eps for Coif also
-Lambda = 1e-1   # 1e-1 works well
+eps_init    = 0.25   # 0.5 works well, 0.25 used as eps for Coif also
+Lambda_init = 1e-2   # 1e-1 works well
+eps_fin     = 0.5
+Lambda_fin  = 1e-1
 
 #%% SIS PF
-resampling = 1
+resampling = 0
 
 #%% Filtering parameters
 # Filtering problem description
@@ -84,7 +87,7 @@ for m in np.arange(len(w)):
     p = p + w[m] * (1/ np.sqrt(2 * np.pi * sigma[m]**2))* exp(-(x[0] - mu[m])**2/ (2*sigma[m]**2))
 
 # Time steps
-T = 3.06
+T = 1.02
 dt = 0.01
 sdt = np.sqrt(dt)
 
@@ -105,7 +108,7 @@ c_x = lambdify(x, c, 'numpy')
 c_dot = diff(c,x[0])
 c_dot_x = lambdify(x[0],c_dot,'numpy')
 
-sigmaW = 1
+sigmaW = 2
 
 #%% Approximate filter parameters
 # Number of particles used in all Monte Carlo based algorithms

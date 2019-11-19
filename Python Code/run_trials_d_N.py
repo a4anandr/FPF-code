@@ -6,7 +6,7 @@ Created on Wed Aug 28 01:00:38 2019
 """
 
 #### MSE vs $d$ and $N$ with the best hyper parameters
-##### Reading the best hyperparameter values for both RKHS OM and Coifman methods
+##### Reading the best hyperparameter values for both $\nabla$-LSTD-RKHS-OM and Coifman methods
 import numpy as np
 from sympy import *
 import math
@@ -95,12 +95,13 @@ if __name__ == '__main__':
                     print('Dimensions ', d)
                     print('No. particles ',N)
                     print('Run ',run)
-                    if No_runs > 1:
-                        seed = np.random.randint(1,1000)
-                    else:
-                        seed = parameters.seed # np.random.randint(1,500)
-                    print('Seed ', seed)
-                    Xi  = fpf.get_samples(N, parameters.mu_b, parameters.sigma_b, parameters.w_b, d, gm, parameters.sigma, seed = seed)
+#                    if No_runs > 1:
+#                        seed = np.random.randint(1,5000)
+#                    else:
+#                        seed = parameters.seed # np.random.randint(1,500)
+#                    print('Seed ', seed)
+#                    Xi  = fpf.get_samples(N, parameters.mu_b, parameters.sigma_b, parameters.w_b, d, gm, parameters.sigma, seed = seed)
+                    Xi  = fpf.get_samples(N, parameters.mu_b, parameters.sigma_b, parameters.w_b, d, gm, parameters.sigma, seed = None)
                     if d == 1:
                         Xi = np.sort(Xi,kind = 'mergesort')
     
@@ -179,7 +180,8 @@ if __name__ == '__main__':
                         K_const = np.mean(Y * Xi, axis = 0)
                         if parameters.exact == 1:
                             mse_const[run,i,n] = fpf.mean_squared_error(K_exact, K_const)     
-    
+                            
+               
                 if saveyn.lower() == 'y':
                     if os.path.isfile('temp/mse_coif_d_N_{}.pkl'.format(No_runs)):
                         output = open('temp/mse_coif_d_N_{}.pkl'.format(No_runs), 'rb')
@@ -207,7 +209,15 @@ if __name__ == '__main__':
                     output = open('temp/mse_const_d_N_{}.pkl'.format(No_runs),'wb')
                     pickle.dump(mse_const_file,output)
                     output.close()
-    
+                    
+                else:
+                    mse_coif_copy = np.copy(mse_coif[:,i,n])
+                    mse_rkhs_N_copy = np.copy(mse_rkhs_N[:,i,n])
+                    mse_rkhs_dN_copy = np.copy(mse_rkhs_dN[:,i,n])
+                    mse_om_copy = np.copy(mse_om[:,i,n])
+                    mse_const_copy = np.copy(mse_const[:,i,n])
+                    mse_diff_td_copy = np.copy(mse_diff_td[:,i,n])
+                    mse_finite_copy = np.copy(mse_finite[:,i,n])
     ##### Loading the pickle file of MSEs 
     else:
         No_runs = parameters.No_runs
@@ -237,21 +247,21 @@ if __name__ == '__main__':
         ##### Plotting MSE v $N$ for all $d$
         for i,d in enumerate(dim):
             fig = plt.figure(figsize = parameters.figure_size)
-            plt.plot(N_values, np.mean(mse_coif,axis = 0)[i], label = 'Markov kernel')
-            plt.plot(N_values, np.mean(mse_om, axis =0)[i], label = 'RKHS OM')
+            plt.plot(N_values, np.mean(mse_coif,axis = 0)[i], label = 'Markov semigroup')
+            plt.plot(N_values, np.mean(mse_om, axis =0)[i], label = '$\nabla$-LSTD-RKHS-OM')
             plt.plot(N_values, np.mean(mse_const,axis =0)[i], 'k--',label = 'Const')
             plt.ylabel('Average MSEs')
             plt.xlabel('$N$')
             plt.legend(framealpha = 0, prop ={'size' :22})
-            plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $d=$ '+ str(d))
+            # plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $d=$ '+ str(d))
             plt.show()
-            fig.savefig('Figure/MSEvNford'+str(d)+'.jpg')
+            fig.savefig('Figure/MSEvNford'+str(d)+'.pdf')
         
         ##### Log plot of MSE v $\log N$ for all $d$
         for i,d in enumerate(dim):
             fig = plt.figure(figsize = parameters.figure_size)
-            plt.plot(N_values, np.mean(mse_coif,axis = 0)[i], label = 'Markov kernel')
-            plt.plot(N_values, np.mean(mse_om, axis =0)[i], label = 'RKHS OM')
+            plt.plot(N_values, np.mean(mse_coif,axis = 0)[i], label = 'Markov semigroup')
+            plt.plot(N_values, np.mean(mse_om, axis =0)[i], label = '$\nabla$-LSTD-RKHS-OM')
             plt.plot(N_values, np.mean(mse_const,axis =0)[i], 'k--',label = 'Const')
             plt.plot(N_values, np.divide(1,N_values),'b--', label ='$1/N$')
             plt.yscale('log')
@@ -259,51 +269,106 @@ if __name__ == '__main__':
             plt.ylabel('Average MSEs')
             plt.xlabel('$N$')
             plt.legend(framealpha = 0, prop ={'size' :22})
-            plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $d=$ '+ str(d))
+            # plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $d=$ '+ str(d))
             plt.show()
-            fig.savefig('Figure/logMSEvlogNford'+str(d)+'.jpg')
+            fig.savefig('Figure/logMSEvlogNford'+str(d)+'.pdf')
         
         #### Including the intercept to -logN in the plot
         offset = np.mean(np.log10(np.mean(mse_om,axis =0)),axis =1) + np.mean(np.log10(N_values))
         for i,d in enumerate(dim):
             fig = plt.figure(figsize = parameters.figure_size)
-            plt.plot(np.log10(N_values), np.log10(np.mean(mse_coif,axis = 0))[i], label = 'Markov kernel')
-            plt.plot(np.log10(N_values), np.log10(np.mean(mse_om, axis =0))[i], label = 'RKHS OM')
+            plt.plot(np.log10(N_values), np.log10(np.mean(mse_coif,axis = 0))[i], label = 'Markov semigroup')
+            plt.plot(np.log10(N_values), np.log10(np.mean(mse_om, axis =0))[i], label = '$\nabla$-LSTD-RKHS-OM')
             plt.plot(np.log10(N_values), np.log10(np.mean(mse_const,axis =0))[i], 'k--',label = 'Const')
             plt.plot(np.log10(N_values), np.log10(np.divide(1,N_values))+offset[i],'b--', label ='$1/N$')
             plt.ylabel('Average MSEs')
             plt.xlabel('$N$')
             plt.legend(framealpha = 0, prop ={'size' :22})
-            plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $d=$ '+ str(d))
+            # plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $d=$ '+ str(d))
             plt.show()
-            fig.savefig('Figure/logMSEvlogNfordWithIntercept'+str(d)+'.jpg')
+            fig.savefig('Figure/logMSEvlogNfordWithIntercept'+str(d)+'.pdf')
         
         ##### Plot of MSE v $d$ for all $N$
         for n,N in enumerate(N_values):
-            fig = plt.figure(figsize = parameters.figure_size)
-            plt.plot(dim, np.mean(mse_coif,axis = 0)[:,n], label = 'Markov kernel')
-            plt.plot(dim, np.mean(mse_om, axis =0)[:,n], label = 'RKHS OM')
+            fig = plt.figure(figsize = (15,8))
+            plt.plot(dim, np.mean(mse_coif,axis = 0)[:,n], label = 'Markov semigroup')
+            plt.plot(dim, np.mean(mse_om, axis =0)[:,n], label = r'$\nabla$-LSTD-RKHS-OM')
             plt.plot(dim, np.mean(mse_const,axis =0)[:,n], 'k--',label = 'Const')
             plt.yscale('linear')
             plt.xscale('linear')
             plt.ylabel('Average MSEs')
             plt.xlabel('$d$')
-            plt.legend(framealpha = 0, prop ={'size' :22})
-            plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $N=$ '+ str(N))
+            plt.legend(framealpha = 0, prop ={'size' :25})
+            plt.text(0.75,10, '$N={}$'.format(N), fontsize = 25)
+            #plt.title('Average MSEs obtained from ' + str(No_runs) + ' trials for $N=$ '+ str(N))
             plt.show()
-            fig.savefig('Figure/logMSEvdforN'+str(N)+'.jpg')
+            fig.savefig('Figure/logMSEvdforN'+str(N)+'.pdf',bbox_inches = 'tight')
             
-#        fig,ax = plt.subplots(nrows = 1, ncols = 2, sharey = True, figsize = (24,8))
-#        sns.distplot(mse_finite_final, ax = ax[0], label = 'Finite basis')
-#        sns.distplot(mse_rkhs_N_final, ax = ax[0], label = 'RKHS-simplified')
-#        sns.distplot(mse_rkhs_dN_final, ax = ax[0], label = 'RKHS-optimal')
-#        sns.distplot(mse_coif_final, ax = ax[0], label = 'Markov semigroup approx.')
-#        sns.distplot(mse_om_final, ax = ax[0], label = 'RKHS OM')
-#        ax[0].legend(loc = 0, framealpha = 0, fontsize = 24)
-#        ax[0].set_xlabel('$x$')
+        fig,ax = plt.subplots(nrows = 1, ncols = 2, sharey = True, figsize = (21,8))
+        sns.distplot(mse_finite_copy, ax = ax[0], label = r'$\nabla$-LSTD-L')
+        sns.distplot(mse_rkhs_N_copy[:-200], ax = ax[0], label = r'$\nabla$-LSTD-RKHS-N')
+        # sns.distplot(mse_rkhs_dN_copy, ax = ax[0], label = r'$\nabla$-LSTD-RKHS-Opt')
+        sns.distplot(mse_om_copy[:-1], ax = ax[0], label = r'$\nabla$-LSTD-RKHS-OM')
+        sns.distplot(mse_coif_copy[:-600], ax = ax[0], label = 'Markov kernel')
+        ax[0].legend(loc = 0, framealpha = 0, fontsize = 25)
+        ax[0].tick_params(labelsize = 25)
+        ax[0].set_xlabel('MSE', fontsize = 25)
+        
+        sns.distplot(mse_diff_td_copy[:-10], ax = ax[1], label = r'$\nabla$-LSTD')
+        sns.distplot(mse_const_copy, ax = ax[1], label = 'Const')
+        ax[1].legend(loc =0, framealpha =0, fontsize = 24)
+        ax[1].tick_params(labelsize = 25)
+        ax[1].set_xlabel('MSE', fontsize = 25)
+        
+        plt.subplots_adjust(wspace = 0)
+        plt.show()
+
+        output = open('temp/mse_coif_100.pkl','rb')
+        mse_coif_copy1 = pickle.load(output)
+        output.close()
+        mse_coif_copy = np.concatenate((mse_coif_copy,mse_coif_copy1),axis=0)
+        output = open('temp/mse_coif_100.pkl','wb')
+        pickle.dump(mse_coif_copy,output)
+        output.close()
+        
+        output = open('temp/mse_rkhs_N_100.pkl','rb')
+        mse_rkhs_N_copy1 = pickle.load(output)
+        output.close()
+        mse_rkhs_N_copy = np.concatenate((mse_rkhs_N_copy,mse_rkhs_N_copy1),axis=0)
+        output = open('temp/mse_rkhs_N_100.pkl','wb')
+        pickle.dump(mse_rkhs_N_copy,output)
+        output.close()
 #        
-#        sns.distplot(mse_diff_td_final, ax = ax[1], label = r'$\nabla-TD$')
-#        sns.distplot(mse_const_final, ax = ax[1], label = 'Const')
-#        ax[1].legend(loc =0, framealpha =0, fontsize = 24)
-#        ax[1].set_xlabel('$x$')
+        output = open('temp/mse_om_100.pkl','rb')
+        mse_om_copy1 = pickle.load(output)
+        output.close()
+        mse_om_copy = np.concatenate((mse_om_copy,mse_om_copy1),axis=0)
+        output = open('temp/mse_om_100.pkl','wb')
+        pickle.dump(mse_om_copy,output)
+        output.close()
 #        
+        output = open('temp/mse_finite_100.pkl','rb')
+        mse_finite_copy1 = pickle.load(output)
+        output.close()
+        mse_finite_copy = np.concatenate((mse_finite_copy,mse_finite_copy1),axis=0)
+        output = open('temp/mse_finite_100.pkl','wb')
+        pickle.dump(mse_finite_copy,output)
+        output.close()
+        
+        
+        output = open('temp/mse_diff_td_100.pkl','rb')
+        mse_diff_td_copy = pickle.load(output)
+        output.close()
+        output = open('temp/mse_diff_td_100.pkl','wb')
+        pickle.dump(mse_diff_td_copy,output)
+        output.close()
+
+        output = open('temp/mse_const_100.pkl','rb')
+        mse_const_copy1 = pickle.load(output)
+        output.close()
+        mse_const_copy = np.concatenate((mse_const_copy,mse_const_copy1),axis=0)       
+        output = open('temp/mse_const_100.pkl','wb')
+        pickle.dump(mse_const_copy,output)
+        output.close()
+                
+    
